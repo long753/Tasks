@@ -1,0 +1,49 @@
+error[invalid-argument-type]: Argument to constructor `Path.__new__` is incorrect
+  --> scripts/main_video.py:47:54
+   |
+47 |     name = f"camera_{source}" if is_camera else Path(source).stem
+   |                                                      ^^^^^^ Expected `str | PathLike[str]`, found `int | str`
+info: element `int` of union `int | str` is not assignable to `str | PathLike[str]`
+info: └── type `int` is not assignable to any element of the union `str | PathLike[str]`
+info:     ├── type `int` is not assignable to protocol `PathLike[str]`
+info:     │   └── protocol member `__fspath__` is not defined on type `int`
+info:     └── ... omitted 1 union element without additional context
+info: Function defined here
+   --> stdlib/pathlib/__init__.pyi:324:13
+    |
+324 |         def __new__(cls, *args: StrPath, **kwargs: Unused) -> Self: ...
+    |             ^^^^^^^      -------------- Parameter declared here
+
+error[unresolved-attribute]: Module `cv2` has no member `VideoWriter_fourcc`
+  --> scripts/main_video.py:77:25
+   |
+77 |                         cv2.VideoWriter_fourcc(*"mp4v"),
+   |                         ^^^^^^^^^^^^^^^^^^^^^^
+
+error[not-subscriptable]: Cannot subscript object of type `Iterator[Results]` with no `__getitem__` method
+  --> scripts/main_video.py:85:26
+   |
+85 |                   result = model.track(
+   |  __________________________^
+86 | |                     frame,
+87 | |                     tracker="bytetrack.yaml",
+88 | |                     persist=True,
+89 | |                     conf=args.conf,
+90 | |                     iou=args.iou,
+91 | |                     imgsz=args.imgsz,
+92 | |                     device=args.device,
+93 | |                     save=False,
+94 | |                     verbose=False,
+95 | |                 )[0]
+   | |____________________^
+
+error[unsupported-operator]: Unsupported `+=` operation
+   --> scripts/main_video.py:124:25
+    |
+124 |                         history["frames_seen"] += 1
+    |                         ----------------------^^^^-
+    |                         |                         |
+    |                         |                         Has type `Literal[1]`
+    |                         Has type `str`
+
+Found 4 diagnostics

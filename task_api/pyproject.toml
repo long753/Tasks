@@ -1,0 +1,48 @@
+[project]
+name = "task-3"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "lap>=0.5.13",
+    "openai>=3.37.0",
+    "opencv-python>=5.0.0.93",
+    "python-dotenv>=1.2.4",
+    "pyyaml>=6.0.3",
+    "ruff>=0.17.4",
+    "ty>=0.0.98",
+    "ultralytics>=8.4.189",
+]
+
+# ==================== Ruff ====================
+
+[tool.ruff]
+line-length = 120
+indent-width = 4
+
+[tool.ruff.lint]
+# I: Import 排序
+# UP: 现代 Python 语法检查
+# 同时保留 Ruff 默认检查规则
+extend-select = ["I", "UP"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.ruff.lint.per-file-ignores]
+# 允许 __init__.py 中存在用于对外导出的 Import
+"__init__.py" = ["F401"]
+
+
+# ==================== ty ====================
+
+# 针对 PyTorch 模型和训练代码放宽特定规则
+[[tool.ty.overrides]]
+include = ["src", "scripts"]
+
+[tool.ty.overrides.rules]
+
+# PyTorch nn.Module.forward 的可写属性覆盖兼容问题
+invalid-mutable-override = "ignore"

@@ -1,0 +1,55 @@
+# Python / uv environments
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+tmp.txt
+
+# Test / lint / coverage caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Local datasets and generated manifests; retain the directory placeholder
+/data/*
+!/data/manifests/
+/data/manifests/*
+!/data/manifests/.gitkeep
+
+# Training artifacts and experiment logs
+/outputs/
+/checkpoints/
+/logs/
+/runs/
+/wandb/
+/mlruns/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.log
+
+# Local credentials; allow example environment files
+.env
+.env.*
+!.env.example
+!.env.*.example
+/.aws/
+
+# Editor / OS / temporary files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+*.tmp
+*.temp

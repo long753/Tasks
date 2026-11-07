@@ -1,0 +1,79 @@
+# 适用于仓库根目录及各 task_* 学习项目；子项目 .gitignore 继续生效。
+# 保留源码、配置、笔记、requirements.txt、pyproject.toml 和 uv.lock。
+# 注意：忽略规则不会移除 Git 已经跟踪的文件。
+
+# Python 虚拟环境、字节码与工具缓存（任意层级）
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# 构建与覆盖率产物
+build/
+dist/
+*.egg-info/
+.coverage
+.coverage.*
+htmlcov/
+
+# 本地凭据；允许提交不含真实密钥的示例模板
+.env
+.env.*
+!.env.example
+!.env.*.example
+.aws/
+
+# 数据与模型：仅匹配项目顶层，避免误伤 src/data、src/models 源码
+/data/*
+/task_*/data/*
+/datasets/
+/task_*/datasets/
+/models/
+/task_*/models/
+
+# 保留现有 SigLIP 数据清单目录占位文件
+!/task_siglip/data/manifests/
+/task_siglip/data/manifests/*
+!/task_siglip/data/manifests/.gitkeep
+
+# 训练、推理与实验输出：仅匹配项目顶层
+/outputs/
+/task_*/outputs/
+/output/
+/task_*/output/
+/checkpoints/
+/task_*/checkpoints/
+/logs/
+/task_*/logs/
+/runs/
+/task_*/runs/
+/wandb/
+/task_*/wandb/
+/mlruns/
+/task_*/mlruns/
+
+# 散落在输出目录之外的模型权重和运行日志
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.log
+
+# 本地助手状态
+.codex/
+.agents/
+.kilo/
+
+# 操作系统与编辑器临时文件；不统一忽略可共享的编辑器配置
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+*.tmp
+*.temp

@@ -1,0 +1,24 @@
+name: siglip-tiny
+model:
+  image_size: 224
+  patch_size: 16
+  max_text_length: 64
+
+  # init prameters
+  init_logit_scale: 2.3
+  init_logit_bias: -10.0
+
+  # vision encoder configuration
+  vision:
+    hidden_size: 192
+    num_hidden_layers: 12
+    num_attention_heads: 3
+    intermediate_size: 768
+
+  # text encoder configuration
+  text:
+    hidden_size: 256
+    num_hidden_layers: 4
+    num_attention_heads: 4
+    intermediate_size: 1024
+    projection_size: 192
