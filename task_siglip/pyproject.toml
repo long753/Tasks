@@ -42,9 +42,6 @@ line-length = 120
 indent-width = 4
 
 [tool.ruff.lint]
-# I: Import 排序
-# UP: 现代 Python 语法检查
-# 同时保留 Ruff 默认检查规则
 extend-select = ["I", "UP"]
 
 [tool.ruff.format]
@@ -52,7 +49,6 @@ quote-style = "double"
 indent-style = "space"
 
 [tool.ruff.lint.per-file-ignores]
-# 允许 __init__.py 中存在用于对外导出的 Import
 "__init__.py" = ["F401"]
 
 
