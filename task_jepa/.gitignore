@@ -1,0 +1,28 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.env
+
+# run outputs
+/models/
+/datasets/
+/outputs/
+
+# removed legacy documentation directory
+/docs/
+
+# Agents and their logs
+AGENTS.md
+CHANGELLOG.md
+
+# local environment dumps
+environment*.json
+requirements_frozen*.txt
+
+# per-user cluster settings for scripts/slurm/launch.py
+scripts/slurm/local.yaml
+
+# kept locally, out of the release: the v2 DROID family (6-frame, stride 2) and its 3/4-level planners
+configs/train/dev/
+configs/eval/dev/

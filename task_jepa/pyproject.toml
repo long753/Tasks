@@ -1,0 +1,131 @@
+[project]
+name = "h-jepa"
+version = "1.0.0"
+description = "Hierarchical JEPA world models"
+readme="README.md"
+license="MIT"
+authors = [
+  {name = "Wancong Zhang"},
+  {name = "Basile Terver"},
+  {name = "Mike Rabbat"},
+  {name = "Yann LeCun"},
+  {name = "Randall Balestriero"},
+]
+urls = {Homepage = "https://github.com/kevinghst/H-JEPA"}
+classifiers = [
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+]
+requires-python = ">=3.11,<3.12"
+dependencies = [
+  "torch==2.7.1",
+  "torchvision==0.22.1",
+  "torchaudio==2.7.1",
+  "numpy",
+  "loguru",
+  "tabulate",
+  "gymnasium==1.2.3",
+  "einops",
+  "h5py",
+  "scipy",
+  "hdf5plugin",
+  "tqdm",
+  "gdown",
+  "typer",
+  "rich",
+]
+
+[project.optional-dependencies]
+train = [
+    "transformers>=4.50.0",
+    "stable-pretraining==0.1.7",  # training only; main_hjepa.ResumableManager needs 0.1.7
+    "datasets>=4",  # stable-pretraining leaves it unpinned and pip otherwise backtracks to 1.x
+    "lightning>=2.5",
+    "torchmetrics",
+    "hydra-core",
+    "hydra-submitit-launcher",
+    "wandb",
+    "decord",
+    "scikit-learn",
+    "matplotlib",
+]
+
+env = [
+    "mujoco==3.14.0",  # mujoco versions change episode outcomes (Cube, AntMaze)
+    "dm_control==1.0.47",
+    "pygame",
+    "pymunk",
+    "shapely",
+    "ogbench==1.2.1",
+    "minigrid",
+    "opencv-python",
+    "stable_baselines3",
+    "imageio",
+    "jax",  # OGBench AntMaze expert policy (data collection, eval-task generation)
+    "flax",
+  "distrax",
+]
+
+[dependency-groups]
+dev = [
+  "ipdb",
+  "pytest",
+  "pytest-cov>=7.0.0",
+  "ruff",
+  "ty",
+  "twine",
+  "mkdocs-shadcn",
+  "pymdown-extensions",
+  "pillow",
+  "decord",
+  "imageio[ffmpeg]",
+  "mkdocstrings[python]",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.21,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = "src"
+module-name = ["stable_worldmodel", "h_jepa"]
+source-exclude = [
+    "**/.mypy_cache/**",
+    "**/__pycache__/**",
+    "**/*.pyc",
+]
+
+# ==================== Ruff ====================
+
+[tool.ruff]
+line-length = 120
+indent-width = 4
+
+[tool.ruff.lint]
+extend-select = ["I", "UP"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+
+# ==================== ty ====================
+
+[tool.ty.environment]
+root = ["./src"]
+python-version = "3.11"
+
+# 针对 PyTorch 模型和训练代码放宽特定规则
+[[tool.ty.overrides]]
+include = ["src", "scripts"]
+
+[tool.ty.overrides.rules]
+
+# PyTorch nn.Module.forward 的可写属性覆盖兼容问题
+incompatible-mutable-override = "ignore"
+[tool.pytest.ini_options]
+testpaths = ["scripts/test"]
