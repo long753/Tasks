@@ -2,7 +2,7 @@
 defaults:
 - base/droid
 - _self_
-output_model_name: droid_hjepa_l2
+model_name: droid_hjepa_l2
 num_levels: 2
 save_every_n_epochs: 10
 grad_clip_per_level: true

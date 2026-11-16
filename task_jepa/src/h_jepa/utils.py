@@ -7,28 +7,17 @@ import torch
 from lightning.pytorch.callbacks import Callback
 from omegaconf import DictConfig, OmegaConf
 
-from stable_worldmodel.paths import StoragePaths
+from stable_worldmodel.paths import StoragePaths, resolve_path
 
 logger = logging.getLogger(__name__)
 
 
-def resolve_model_checkpoint_path(run_name: str, models: str | Path | None = None) -> Path:
-    """Resolve a checkpoint or run relative to the selected model directory."""
-    root = StoragePaths.resolve(models=models or "models").models
-    path = Path(run_name).expanduser()
-    if not path.is_absolute():
-        path = root / path
-    if path.is_dir():
-        checkpoints = sorted(path.glob("*_object.ckpt"), key=lambda item: item.stat().st_ctime, reverse=True)
-        if not checkpoints:
-            raise FileNotFoundError(f"No *_object.ckpt found in directory: {path}")
-        return checkpoints[0]
-    if path.suffix != ".ckpt":
-        path = Path(f"{path}_object.ckpt")
+def resolve_model_checkpoint_path(checkpoint: str | Path) -> Path:
+    """Resolve an exact checkpoint file independently of model output storage."""
+    path = resolve_path(checkpoint)
     if not path.is_file():
-        raise FileNotFoundError(f"Checkpoint path does not exist: {path}. Launch pretraining first.")
+        raise FileNotFoundError(f"Checkpoint file does not exist: {path}")
     return path
-
 
 def resolve_checkpoint_config_path(
     ckpt_path: str | Path,
@@ -257,6 +246,7 @@ class PlanningEvalCallback(Callback):
 
         cfg = load_eval_config(config_name=self.eval_cfg.config_name, **self.storage.as_dict())
         cfg = cast(DictConfig, OmegaConf.create(OmegaConf.to_container(cfg, resolve=False)))
+        cfg.run_name = pl_module._train_cfg.run_name
         overrides = self.eval_cfg.get('overrides', None)
         if overrides is not None:
             cfg = cast(DictConfig, OmegaConf.merge(cfg, overrides))

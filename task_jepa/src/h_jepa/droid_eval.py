@@ -10,20 +10,20 @@ ground-truth actions:
 
 Planner settings come from configs/eval/droid_{flat,l2}.yaml, overridable from the command line.
 Paper cells (planner lr per level, level 1 first):
-  LeWM+IDM  --config-name droid_flat solver.optimizer_kwargs.lr=0.01
-  HWM       --config-name droid_l2 solver.solvers.level1.optimizer_kwargs.lr=0.01
+  LeWM+IDM  --config droid_flat solver.optimizer_kwargs.lr=0.01
+  HWM       --config droid_l2 solver.solvers.level1.optimizer_kwargs.lr=0.01
             solver.solvers.level2.optimizer_kwargs.lr=0.3
-  H-JEPA    --config-name droid_l2 solver.solvers.level1.optimizer_kwargs.lr=0.01
+  H-JEPA    --config droid_l2 solver.solvers.level1.optimizer_kwargs.lr=0.01
             solver.solvers.level2.optimizer_kwargs.lr=0.01
 
-Outputs under output.dir (relative: to the selected outputs run directory): ep_{k}/actions.pt ({"planned", "gt",
+Outputs under outputs/run_name: ep_{k}/actions.pt ({"planned", "gt",
 "grasp_pos"}, raw units; k = manifest index), ep_{k}/planning_compute.json, plan_config.yaml and
 eval.csv, aggregated over every ep_*/actions.pt present so one-clip shards
 (start_index=k num_eval=1) can share one output dir. Each clip plans with planner seed + k
 (as eval.chunk_size=1 in planning_eval), so a rerun into the same dir (e.g. a requeued job)
 skips the clips already saved and gives the same result as one unbroken run.
 
-  python scripts/eval/eval.py --config-name droid_flat policy=$RUN/<run>_object.ckpt seed=1 output.dir=$OUT
+  python scripts/eval/eval.py --config droid_flat --checkpoint $RUN/<run>_object.ckpt --outputs $OUT --run-name droid_eval seed=1
 """
 
 import csv
@@ -164,7 +164,7 @@ def run_clip_eval(cfg: DictConfig, model=None, results_dir: str | Path | None = 
         config=_build_policy_plan_config(cfg),
     )
     OmegaConf.save(cfg, out_dir / "plan_config.yaml", resolve=True)
-    print(f"clips {clip_ids.start}..{clip_ids.stop - 1} of {len(ds)} | ckpt={cfg.policy}")
+    print(f"clips {clip_ids.start}..{clip_ids.stop - 1} of {len(ds)} | ckpt={cfg.checkpoint}")
 
     tf = img_transform(cfg.img_size)
     # As planning_eval's eval.chunk_size=1: every clip reseeds the planner generators with seed + k, so

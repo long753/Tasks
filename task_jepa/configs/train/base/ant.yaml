@@ -26,9 +26,8 @@ data:
     level1:
       frameskip: 5
       num_steps: ${eval:'${level1.wm.history_size} + ${level1.wm.rollout_n}'}
-output_model_name: model
+model_name: model
 env: ant
-subdir: ${env}/${output_model_name}/seed${seed}
 quick_debug: false
 num_workers: 6
 seed: 42

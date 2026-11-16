@@ -2,7 +2,8 @@
 # Offline DROID planning evals behind Figure 9(b): the release planner cell of
 # each model (the config defaults) on the 16 evaluation clips, with planner seeds
 # 1/2/3 for every trained model, then the mean Frechet fidelity per model.
-# EPOCHS="50 100 150" evaluates droid_<model>_epoch_<N>_object.ckpt instead.
+# --checkpoint-root selects saved checkpoints (models/ by default); --outputs is for
+# evaluation artifacts and is forwarded to eval.py.
 set -e
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -12,34 +13,60 @@ SEEDS=${SEEDS:-"1 1000 10000"}
 PLAN_SEEDS=${PLAN_SEEDS:-"1 2 3"}
 EPOCHS=${EPOCHS:-""}
 
-storage_path() {
-  local flag=$1 default=$2 value
-  shift 2
-  value=$default
-  while (($#)); do
-    case $1 in
-      "$flag")
-        (($# > 1)) || { echo "missing value for $flag" >&2; exit 2; }
-        value=$2
-        shift 2
-        ;;
-      "$flag"=*)
-        value=${1#*=}
-        shift
-        ;;
-      *)
-        shift
-        ;;
-    esac
-  done
-  [[ $value = /* ]] || value="$ROOT/$value"
-  printf '%s\n' "$value"
-}
-
-MODELS_ROOT="$(storage_path --models models "$@")"
-OUTPUTS_ROOT="$(storage_path --outputs outputs "$@")"
-RUNS=${RUNS:-"$MODELS_ROOT/droid"}
-EVAL_OUTPUTS="$OUTPUTS_ROOT/eval/droid"
+CHECKPOINT_ROOT="$ROOT/models"
+OUTPUTS_ROOT="$ROOT/outputs"
+RUN_NAME_PREFIX="eval/$(date +%Y%m%d-%H%M%S)-$$"
+ARGS=()
+while (($#)); do
+  case $1 in
+    --checkpoint-root)
+      (($# > 1)) || { echo "missing value for --checkpoint-root" >&2; exit 2; }
+      CHECKPOINT_ROOT=$2
+      shift 2
+      ;;
+    --checkpoint-root=*)
+      CHECKPOINT_ROOT=${1#*=}
+      shift
+      ;;
+    --run-name)
+      (($# > 1)) || { echo "missing value for --run-name" >&2; exit 2; }
+      RUN_NAME_PREFIX=$2
+      shift 2
+      ;;
+    --run-name=*)
+      RUN_NAME_PREFIX=${1#*=}
+      shift
+      ;;
+    --outputs)
+      (($# > 1)) || { echo "missing value for --outputs" >&2; exit 2; }
+      OUTPUTS_ROOT=$2
+      ARGS+=("$1" "$2")
+      shift 2
+      ;;
+    --outputs=*)
+      OUTPUTS_ROOT=${1#*=}
+      ARGS+=("$1")
+      shift
+      ;;
+    --models|--models=*)
+      echo "eval_droid.sh uses --checkpoint-root for saved checkpoints; --outputs selects evaluation artifacts" >&2
+      exit 2
+      ;;
+    *)
+      ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+[[ $CHECKPOINT_ROOT = /* ]] || CHECKPOINT_ROOT="$ROOT/$CHECKPOINT_ROOT"
+[[ $OUTPUTS_ROOT = /* ]] || OUTPUTS_ROOT="$ROOT/$OUTPUTS_ROOT"
+RUNS=${RUNS:-"$CHECKPOINT_ROOT/droid"}
+[[ $RUNS = /* ]] || RUNS="$ROOT/$RUNS"
+if [[ -n $RUN_NAME_PREFIX ]]; then
+  EVAL_OUTPUTS="$OUTPUTS_ROOT/${RUN_NAME_PREFIX%/}/droid"
+else
+  EVAL_OUTPUTS="$OUTPUTS_ROOT/droid"
+fi
 
 for model in $MODELS; do
   plan=flat
@@ -49,19 +76,18 @@ for model in $MODELS; do
     for epoch in ${EPOCHS:-final}; do
       if [[ $epoch == final ]]; then
         ckpt="$run/droid_${model}_object.ckpt"
-        out="$EVAL_OUTPUTS/droid_${model}/seed${seed}/eval_${plan}"
       else
         ckpt="$run/droid_${model}_epoch_${epoch}_object.ckpt"
-        out="$EVAL_OUTPUTS/droid_${model}/seed${seed}/eval_${plan}/epoch_${epoch}"
       fi
       if [[ ! -f $ckpt ]]; then
         echo "skip: missing $ckpt"
         continue
       fi
       for ps in $PLAN_SEEDS; do
-        plan_out="$out/plan_seed${ps}"
-        "$PYTHON" "$ROOT/scripts/eval/eval.py" "$@" --config-name "droid_${plan}" "policy=$ckpt" "seed=$ps" \
-          "output.dir=$plan_out" "hydra.run.dir=$plan_out/hydra"
+        run_name="droid/droid_${model}/seed${seed}/eval_${plan}/epoch_${epoch}/plan_seed${ps}"
+        [[ -z $RUN_NAME_PREFIX ]] || run_name="${RUN_NAME_PREFIX%/}/$run_name"
+        "$PYTHON" "$ROOT/scripts/eval/eval.py" "${ARGS[@]}" --config "droid_${plan}" \
+          --checkpoint "$ckpt" --run-name "$run_name" "seed=$ps"
       done
     done
   done
@@ -80,7 +106,7 @@ for model in models:
     match = re.search(r"_l(\d)", model)
     plan = f"l{match.group(1)}" if match else "flat"
     for epoch in epochs:
-        sub = "" if epoch == "final" else f"/epoch_{epoch}"
+        sub = f"/epoch_{epoch}"
         per_seed = []
         for seed in seeds:
             run = f"{sys.argv[5]}/droid_{model}/seed{seed}/eval_{plan}{sub}"

@@ -931,6 +931,8 @@ class World:
         process: dict[str, Any] | None = None,
         start_state_mode: str = 'dataset_full',
         goal_state_mode: str = 'dataset_full',
+        *,
+        on_step: Callable[["World", int], None] | None = None,
     ) -> dict:
         """Evaluate the policy starting from states sampled from a dataset.
 
@@ -941,6 +943,8 @@ class World:
             goal_offset_steps: Number of steps ahead to look for the goal.
             eval_budget: Maximum steps allowed for the agent to reach the goal.
             callables: Optional list of method calls to setup the env.
+            on_step: Optional observer called after state restoration (step 0)
+                and after each executed step. Disabled during ordinary evaluation.
 
         Returns:
             Dictionary containing success rates and other metrics.
@@ -1204,6 +1208,9 @@ class World:
         wall_clock_to_success = np.full(self.num_envs, np.nan, dtype=np.float64)
         steps_to_success = np.full(self.num_envs, np.nan, dtype=np.float64)
 
+        if on_step is not None:
+            on_step(self, 0)
+
         eval_start_time = time.perf_counter()
         for i in range(eval_budget):
             self.infos.update(deepcopy(goal_step))
@@ -1222,6 +1229,8 @@ class World:
             )
             # for auto-reset
             self.envs.sync_env._autoreset_envs = np.zeros((self.num_envs,))
+            if on_step is not None:
+                on_step(self, i + 1)
 
         n_episodes = len(ep_idx_arr)
 

@@ -29,7 +29,7 @@ dataset:
     frameskip: 1
     num_steps: 1
 seed: 42
-policy: null
+checkpoint: null
 dump_eval_trajs_path: null
 load_eval_trajs_path: ${datasets}/eval_trajs/ant/expert_grid_d3_n50.pt
 solver:
@@ -119,5 +119,3 @@ eval:
     args:
       goal_xy:
         value: goal_xy
-output:
-  dir: null

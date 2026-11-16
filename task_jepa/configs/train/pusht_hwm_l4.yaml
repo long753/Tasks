@@ -3,7 +3,7 @@
 defaults:
 - base/pusht
 - _self_
-output_model_name: pusht_hwm_l4
+model_name: pusht_hwm_l4
 num_levels: 4
 data:
   dataset:

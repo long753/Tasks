@@ -51,7 +51,7 @@ def parse_args() -> argparse.Namespace:
     )
     config_group = parser.add_mutually_exclusive_group(required=True)
     config_group.add_argument(
-        "--config-name",
+        "--config",
         help="Eval config name under configs/eval.",
     )
     config_group.add_argument("--config-path", help="Path to an eval config YAML.")
@@ -566,7 +566,7 @@ def main() -> None:
 
     storage = StoragePaths.resolve(args.datasets, args.models, args.outputs)
     cfg = load_eval_config(
-        config_name=args.config_name,
+        config_name=args.config,
         config_path=args.config_path,
         **storage.as_dict(),
     )

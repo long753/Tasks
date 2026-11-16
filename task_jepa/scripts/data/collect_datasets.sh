@@ -9,8 +9,8 @@ ANT=${ANT:-"explore_stitch_train stitch_val probing_train probing_eval"}
 FOURROOM=${FOURROOM:-"fourroom_tp35_d1 fourroom_tp35_d1_val fourroom_tp35_d1_probing fourroom_tp35_d1_probing_val"}
 
 for name in $ANT; do
-  python collect_antmaze.py --config-name "visual_antmaze_medium_$name" "$@"
+  python collect_antmaze.py --config "visual_antmaze_medium_$name" "$@"
 done
 for name in $FOURROOM; do
-  python collect_fourroom_distractors.py --config-name "$name" "$@"
+  python collect_fourroom_distractors.py --config "$name" "$@"
 done

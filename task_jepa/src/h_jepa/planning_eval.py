@@ -3,6 +3,7 @@ import shlex
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol, cast
 
@@ -25,7 +26,7 @@ from h_jepa.eval_config_utils import (
     _is_hierarchical_solver,
 )
 from h_jepa.hierarchical_solver import build_hierarchical_solver
-from h_jepa.runtime import model_run_id, storage_config
+from h_jepa.runtime import storage_config
 from h_jepa.utils import resolve_model_checkpoint_path
 from stable_worldmodel.paths import CONFIG_ROOT, PROJECT_ROOT, StoragePaths, resolve_path
 
@@ -75,7 +76,7 @@ def load_eval_config(
     path = resolve_path(config_path) if config_path is not None else CONFIG_ROOT / 'eval' / f'{config_name}.yaml'
     cfg = OmegaConf.load(path)
     paths = StoragePaths.resolve(datasets or 'datasets', models or 'models', outputs or 'outputs')
-    return cast(DictConfig, OmegaConf.merge(cfg, paths.as_dict()))
+    return storage_config(OmegaConf.merge(cfg, paths.as_dict()))
 
 
 def get_episodes_length(dataset, episodes):
@@ -116,14 +117,7 @@ def resolve_results_dir(
         return resolve_path(results_dir)
 
     cfg = storage_config(cfg)
-    output_dir = Path(cfg.output.get('dir') or 'eval')
-    if output_dir.is_absolute():
-        return output_dir
-    root = Path(cfg.outputs)
-    if cfg.policy not in (None, 'random'):
-        checkpoint = resolve_model_checkpoint_path(cfg.policy, cfg.models)
-        root = root / model_run_id(checkpoint, cfg.models)
-    return root / output_dir
+    return Path(cfg.outputs) / cfg.run_name
 
 
 def _required_process_columns(cfg: DictConfig) -> list[str]:
@@ -167,7 +161,7 @@ def _normalizer_artifact_to_process(
 
 
 def _load_policy_normalizer_artifact(cfg: DictConfig) -> dict:
-    ckpt_path = resolve_model_checkpoint_path(cfg.policy, cfg.get('models'))
+    ckpt_path = resolve_model_checkpoint_path(cfg.checkpoint)
     normalizer_path = ckpt_path.parent / NORMALIZER_ARTIFACT_FILENAME
     if not normalizer_path.exists():
         raise FileNotFoundError(
@@ -187,7 +181,7 @@ def _build_eval_process_from_policy_normalizer(
         else None
     )
     if artifact is None:
-        if cfg.get('policy', 'random') == 'random':
+        if cfg.get('checkpoint') is None:
             return {}
         artifact = _load_policy_normalizer_artifact(cfg)
 
@@ -205,17 +199,17 @@ def _drop_levels_above_model(cfg, num_levels):
 
 
 def load_model(cfg: DictConfig, model=None):
-    """Load cfg.policy (or pick the cost module of an in-memory flat model) for planning on cuda."""
+    """Load cfg.checkpoint (or pick the cost module of an in-memory flat model) for planning on cuda."""
     if model is None:
         if _is_hierarchical_solver(cfg):
             ckpt_path = resolve_model_checkpoint_path(
-                cfg.policy, cfg.get('models')
+                cfg.checkpoint
             )
             model = torch.load(
                 ckpt_path, map_location='cpu', weights_only=False
             )
         else:
-            model = swm.policy.AutoCostModel(cfg.policy, models_dir=cfg.models)
+            model = swm.policy.AutoCostModel(str(resolve_model_checkpoint_path(cfg.checkpoint)))
 
         model = model.to('cuda')
     elif not _is_hierarchical_solver(cfg):
@@ -245,7 +239,7 @@ def _build_policy(
     transform: dict,
     model=None,
 ):
-    if model is None and cfg.get('policy', 'random') == 'random':
+    if model is None and cfg.get('checkpoint') is None:
         return swm.policy.RandomPolicy()
 
     model = load_model(cfg, model)
@@ -363,15 +357,19 @@ def _run_chunked_eval(
     transform: dict,
     model,
     results_dir: Path,
+    *,
+    task_index: int | None = None,
+    on_step: Callable[[swm.World, int], None] | None = None,
 ) -> dict:
-    """Evaluate the first eval.num_eval loaded tasks chunk_size at a time (one World of chunk_size
-    envs per chunk), so that a preempted eval only redoes the chunk it was in.
+    """Evaluate eval.num_eval tasks, starting at task_index (default 0), in chunks.
+    Each chunk uses one World of chunk_size envs.
 
     Each chunk writes results_dir/chunks/tasks_<start>-<end>.json (per-task results + GD solve
     records) and is skipped when that file exists. Every chunk reseeds the planner generators with
     base seed + its first task index: its result does not depend on which chunks ran before it in
     the process, and a single chunk (chunk_size >= num_eval) plans with the unchunked eval's seed.
     metrics.yaml aggregates the chunks with the keys of the unchunked eval.
+    A live observer reruns completed chunks instead of skipping their execution.
     """
     import json
 
@@ -379,9 +377,12 @@ def _run_chunked_eval(
         load_eval_trajs_path, map_location='cpu', weights_only=False
     )
     n = int(cfg.eval.num_eval)
-    if len(payload['data']) < n:
+    first = 0 if task_index is None else task_index
+    stop = first + n
+    if first < 0 or stop > len(payload['data']):
         raise ValueError(
-            f'{load_eval_trajs_path}: {len(payload["data"])} tasks < eval.num_eval={n}'
+            f'{load_eval_trajs_path}: requested tasks [{first}, {stop}), '
+            f'but the file contains {len(payload["data"])} tasks'
         )
     ep_idx = payload.get('episodes_idx')
     ep_idx = (
@@ -393,15 +394,15 @@ def _run_chunked_eval(
     chunk_dir = results_dir / 'chunks'
     chunk_dir.mkdir(parents=True, exist_ok=True)
     chunk_paths = {
-        s: chunk_dir / f'tasks_{s:03d}-{min(s + chunk_size, n):03d}.json'
-        for s in range(0, n, chunk_size)
+        s: chunk_dir / f'tasks_{s:03d}-{min(s + chunk_size, stop):03d}.json'
+        for s in range(first, stop, chunk_size)
     }
 
     policy, gens = None, []
     for start, path in chunk_paths.items():
-        if path.exists():
+        if path.exists() and on_step is None:
             continue
-        end = min(start + chunk_size, n)
+        end = min(start + chunk_size, stop)
         if policy is None:
             policy = _build_policy(cfg, process, transform, model=model)
             solver = getattr(policy, 'solver', None)
@@ -440,6 +441,7 @@ def _run_chunked_eval(
                     goal_state_mode=cfg.eval.get(
                         'goal_state_mode', 'dataset_full'
                     ),
+                    on_step=on_step,
                 )
             metrics['evaluation_time'] = time.time() - t0
         finally:
@@ -507,6 +509,9 @@ def run_planning_eval(
     cfg: DictConfig,
     model=None,
     results_dir: str | Path | None = None,
+    *,
+    task_index: int | None = None,
+    on_step: Callable[[swm.World, int], None] | None = None,
 ):
     cfg = storage_config(cfg)
     resolved_results_dir = resolve_results_dir(cfg, results_dir)
@@ -554,6 +559,8 @@ def run_planning_eval(
     chunk_size = cfg.eval.get(
         'chunk_size', 1
     )  # resumable per chunk of N tasks; null: one World of all tasks
+    if task_index is not None and (not chunk_size or dump_eval_only):
+        raise ValueError("Selecting a task requires chunked evaluation from a saved task file")
     if chunk_size and not dump_eval_only:
         if not load_eval_trajs_path:
             raise ValueError(
@@ -569,6 +576,8 @@ def run_planning_eval(
             transform,
             model,
             resolved_results_dir,
+            task_index=task_index,
+            on_step=on_step,
         )
 
     world = swm.World(**cast(dict[str, Any], world_cfg), image_shape=image_shape)
@@ -604,6 +613,7 @@ def run_planning_eval(
                 goal_state_mode=cfg.eval.get(
                     'goal_state_mode', 'dataset_full'
                 ),
+                on_step=on_step,
             )
         end_time = time.time()
     finally:

@@ -2,7 +2,7 @@
 defaults:
 - base/ant
 - _self_
-output_model_name: ant_hjepa_l4
+model_name: ant_hjepa_l4
 num_levels: 4
 data:
   dataset:

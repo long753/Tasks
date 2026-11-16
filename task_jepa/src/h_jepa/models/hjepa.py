@@ -55,6 +55,32 @@ class HJEPA(nn.Module):
         """Number of levels in the hierarchy."""
         return self.num_levels
 
+    def set_training_level(self, level: int) -> None:
+        """Make one hierarchy level trainable and keep every other level frozen."""
+        if not isinstance(level, int) or isinstance(level, bool):
+            raise TypeError(f"level must be an int in [1, {self.num_levels}], got {type(level).__name__}")
+        if level < 1 or level > self.num_levels:
+            raise ValueError(f"level must be in [1, {self.num_levels}], got {level}")
+
+        self._training_level = level
+        for current_level, jepa in enumerate(self.jepas, start=1):
+            is_active = current_level == level
+            for parameter in jepa.parameters():
+                parameter.requires_grad_(is_active)
+                parameter.grad = None
+            jepa.train(self.training if is_active else False)
+
+    def train(self, mode: bool = True):
+        """Set module mode while retaining eval mode for frozen hierarchy levels."""
+        super().train(mode)
+
+        training_level = getattr(self, "_training_level", None)
+        if training_level is not None:
+            for current_level, jepa in enumerate(self.jepas, start=1):
+                if current_level != training_level:
+                    jepa.eval()
+        return self
+
     def _level_uses_proprio(self, level: int) -> bool:
         """Whether this level encodes pixel and proprio streams with a fusion encoder."""
         encoder = getattr(self.jepas[level - 1], "encoder", None)
@@ -233,9 +259,32 @@ class HJEPA(nn.Module):
                 )
             info[output_key] = value
 
-    def encode_hierarchical(self, info: dict, sparse_level1_encode: bool = True) -> dict:
-        """Encode the level-1 sequence ("pixels_level1", "action_level1") through
-        all levels and randomly crop each level's outputs to its target length."""
+    def encode_hierarchical(
+        self,
+        info: dict,
+        sparse_level1_encode: bool = True,
+        *,
+        detach_lower_state: bool = False,
+        max_level: int | None = None,
+        frozen_prefix: int = 0,
+    ) -> dict:
+        """Encode and crop a hierarchy prefix, optionally isolating state gradients.
+
+        Detachment affects only upper-level inputs, not the saved lower-level
+        outputs or the action chain. ``frozen_prefix`` additionally runs the
+        first levels under ``torch.no_grad`` for an explicitly staged call.
+        Planning uses JEPA.encode directly.
+        """
+        if max_level is None:
+            max_level = self.num_levels
+        if not isinstance(max_level, int) or isinstance(max_level, bool):
+            raise TypeError(f"max_level must be an int in [1, {self.num_levels}], got {type(max_level).__name__}")
+        if max_level < 1 or max_level > self.num_levels:
+            raise ValueError(f"max_level must be in [1, {self.num_levels}], got {max_level}")
+        if not isinstance(frozen_prefix, int) or isinstance(frozen_prefix, bool):
+            raise TypeError(f"frozen_prefix must be an int in [0, {max_level}], got {type(frozen_prefix).__name__}")
+        if frozen_prefix < 0 or frozen_prefix > max_level:
+            raise ValueError(f"frozen_prefix must be in [0, {max_level}], got {frozen_prefix}")
         level_info = self._collect_level_info(info, 1)
         self._add_level_target_aliases(level_info, 1)
         level1_working_keys = set(level_info)
@@ -243,23 +292,44 @@ class HJEPA(nn.Module):
         seq_len = level_info["pixels"].size(1)
         if sparse_level1_encode:
             crop_starts, frame_indices = self._draw_crops_and_level1_frames(
-                seq_len, self.num_levels, level_info["pixels"].device
+                seq_len, max_level, level_info["pixels"].device
             )
         else:
             crop_starts, frame_indices = {}, range(seq_len)
-        self._encode_level1(level_info, "pixels", frame_indices)
+        if frozen_prefix >= 1:
+            with torch.no_grad():
+                self._encode_level1(level_info, "pixels", frame_indices)
+        else:
+            self._encode_level1(level_info, "pixels", frame_indices)
 
-        for level in range(2, self.num_levels + 1):
+        for level in range(2, max_level + 1):
             jepa = self.get_level(level)
             level_info["action"] = level_info[f"action_{level - 1}"]
             if self._level_uses_proprio(level):
                 level_info[cast(FusionEncoder, jepa.encoder).proprio_key] = level_info[f"proprio_embed_{level - 1}"]
 
-            level_out = jepa.encode(
-                level_info,
-                key=self._get_level_input_key(level),
-                chunk_temporal_inputs=True,
-            )
+            input_key = self._get_level_input_key(level)
+            upper_info = level_info
+            if detach_lower_state:
+                upper_info = dict(level_info)
+                upper_info[input_key] = upper_info[input_key].detach()
+                if self._level_uses_proprio(level):
+                    proprio_key = cast(FusionEncoder, jepa.encoder).proprio_key
+                    upper_info[proprio_key] = upper_info[proprio_key].detach()
+
+            if level <= frozen_prefix:
+                with torch.no_grad():
+                    level_out = jepa.encode(
+                        upper_info,
+                        key=input_key,
+                        chunk_temporal_inputs=True,
+                    )
+            else:
+                level_out = jepa.encode(
+                    upper_info,
+                    key=input_key,
+                    chunk_temporal_inputs=True,
+                )
             self._store_chunked_state_outputs(level_info, level_out, level)
             for output_name in ("embed", "pixel_embed", "proprio_embed"):
                 if f"{output_name}_0" in level_out:
@@ -275,7 +345,7 @@ class HJEPA(nn.Module):
             }
         )
 
-        for level in range(1, self.num_levels + 1):
+        for level in range(1, max_level + 1):
             target_len = getattr(self.jepas[level - 1], "target_length", None)
             if target_len is None:
                 continue

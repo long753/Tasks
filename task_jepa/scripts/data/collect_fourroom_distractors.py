@@ -138,4 +138,4 @@ def run(cfg):
 
 
 if __name__ == '__main__':
-    run_hydra(run)
+    run_hydra(run, command='data')

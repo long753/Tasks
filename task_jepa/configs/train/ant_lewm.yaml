@@ -2,7 +2,7 @@
 defaults:
 - base/ant
 - _self_
-output_model_name: ant_lewm
+model_name: ant_lewm
 num_levels: 1
 trainer:
   max_epochs: 7

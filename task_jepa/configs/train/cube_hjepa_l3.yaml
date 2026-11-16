@@ -2,7 +2,7 @@
 defaults:
 - base/cube
 - _self_
-output_model_name: cube_hjepa_l3
+model_name: cube_hjepa_l3
 num_levels: 3
 data:
   dataset:

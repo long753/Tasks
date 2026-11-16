@@ -1,6 +1,3 @@
-# uuid
-import uuid
-from datetime import datetime
 from functools import partial
 from pathlib import Path
 from typing import Any, cast
@@ -10,7 +7,7 @@ import lightning as pl
 import stable_pretraining as spt
 import torch
 from loguru import logger as logging
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, OmegaConf, open_dict
 from stable_pretraining.callbacks.hf_models import HuggingFaceCheckpointCallback
 from torch.utils.data import DataLoader
 
@@ -19,10 +16,12 @@ from h_jepa.data import (
     build_hdf5_dataset,
     build_normalizer_artifact,
     get_column_normalizer,
+    get_column_normalizer_from_artifact,
     save_normalizer_artifact,
 )
 from h_jepa.final_probing_decoding_eval import FinalProbingDecodingEvalCallback
 from h_jepa.hjepa_utils import create_world_model, hjepa_forward
+from h_jepa.layerwise_training import run_layerwise_training
 from h_jepa.runtime import storage_config
 from h_jepa.utils import (
     DebugArtifactCleanupCallback,
@@ -98,6 +97,8 @@ def _build_hjepa_optimizer_factory(model, cfg):
         param_groups = []
         for level in range(1, int(cfg.num_levels) + 1):
             level_params = [param for param in model.get_level(level).parameters() if param.requires_grad]
+            if not level_params:
+                continue
             param_groups.append(
                 {
                     "params": level_params,
@@ -143,24 +144,37 @@ def _normalize_uint8_images_on_device(batch):
         batch[key] = value.float().div(255.0).sub(mean).div(std)
 
 
-def _hjepa_training_forward(self, batch, stage, cfg):
+def _hjepa_training_forward(self, batch, stage, cfg, *, detach_lower_state: bool = False, active_level: int | None = None):
     return hjepa_forward(
         self,
         batch,
         stage,
         cfg,
         normalize_batch=_normalize_uint8_images_on_device,
+        detach_lower_state=detach_lower_state,
+        active_level=active_level,
     )
 
 
-@hydra.main(version_base=None, config_path=str(CONFIG_ROOT / "train"), config_name=None)
-def run(cfg):
+def run_training(
+    cfg, *, detach_lower_state: bool = False, active_level: int | None = None,
+    world_model=None, losses=None, stage_callback: pl.Callback | None = None,
+):
+    """Shared fit assembly for joint training or one explicitly selected stage."""
     #########################
     ##       dataset       ##
     #########################
 
     _configure_runtime_performance()
     cfg = storage_config(cfg)
+    with open_dict(cfg):
+        cfg.training_variant = (
+            "layerwise" if active_level is not None else
+            "state_stop_gradient" if detach_lower_state else "end_to_end"
+        )
+        cfg.detach_lower_state = detach_lower_state
+        if active_level is not None:
+            cfg.active_level = active_level
     cache_dir = cfg.datasets
 
     dataset_cfg = {k: v for k, v in cfg.data.dataset.items() if k != "val_name"}
@@ -174,9 +188,13 @@ def run(cfg):
         val_dataset_cfg["total_transitions"] = int(val_total_transitions)
     val_dataset = build_hdf5_dataset(val_dataset_cfg, cache_dir=cache_dir)
 
+    normalizer_artifact = getattr(world_model, "normalizer_artifact", None)
+    if active_level is not None and normalizer_artifact is None:
+        normalizer_artifact = build_normalizer_artifact(cfg, train_dataset)
     # Stored images already match img_size; uint8 pixels are normalized on device.
     extra_transforms = [
-        get_column_normalizer(train_dataset, col, col)
+        get_column_normalizer_from_artifact(normalizer_artifact, col, col)
+        if normalizer_artifact is not None else get_column_normalizer(train_dataset, col, col)
         for col in cfg.data.dataset.keys_to_load
         if not col.startswith("pixels")
     ]
@@ -199,8 +217,14 @@ def run(cfg):
     ##       model / optim      ##
     ##############################
 
-    normalizer_artifact = build_normalizer_artifact(cfg, train_dataset)
-    world_model, losses = create_world_model(cfg)
+    if normalizer_artifact is None:
+        normalizer_artifact = build_normalizer_artifact(cfg, train_dataset)
+    if world_model is None:
+        world_model, losses = create_world_model(cfg)
+    if losses is None:
+        raise ValueError("Loss modules must be supplied with an existing world model")
+    if active_level is not None:
+        world_model.set_training_level(active_level)
     world_model.normalizer_artifact = normalizer_artifact
     models = {
         "model": world_model,
@@ -236,21 +260,20 @@ def run(cfg):
     world_model = GradClipModule(
         **models,
         **losses,
-        forward=partial(_hjepa_training_forward, cfg=cfg),
+        forward=partial(
+            _hjepa_training_forward, cfg=cfg,
+            detach_lower_state=detach_lower_state, active_level=active_level,
+        ),
         optim=optimizers,
     )
     world_model._train_cfg = cfg
-    world_model._output_model_name = cfg.output_model_name
+    world_model._model_name = cfg.model_name
 
     ##########################
     ##       training       ##
     ##########################
 
-    # run_id = cfg.get("subdir") or ""
-
-    # use rand_str to ensure unique run_dir for each run if subdir is not specified in cfg.
-    rand_str = f"{datetime.now():%Y%m%d_%H%M%S}_{uuid.uuid4().hex[:8]}"
-    run_id = cfg.get("subdir") or rand_str
+    run_id = cfg.run_name
 
     run_dir = Path(cfg.models) / run_id
     output_dir = Path(cfg.outputs) / run_id
@@ -282,65 +305,60 @@ def run(cfg):
     logging.info(f"Saved training normalizer artifact to {normalizer_path}")
 
     lr_callback = pl.pytorch.callbacks.LearningRateMonitor(logging_interval="step")
-    object_dump_callback = ModelObjectCallBack(
-        dirpath=run_dir,
-        filename=cfg.output_model_name,
-        epoch_interval=int(cfg.save_every_n_epochs),
-    )
     debug_cleanup_callback = DebugArtifactCleanupCallback(
         enabled=bool(cfg.get("quick_debug", False)),
         run_dir=run_dir,
     )
-    _pe = cfg.planning_eval
-    planning_eval_callback = PlanningEvalCallback(
-        enabled=bool(_pe.enabled),
-        eval_cfg=_pe,
-        run_dir=run_dir,
-        storage={name: cfg[name] for name in ("datasets", "models", "outputs")},
-        results_dir=output_dir,
-        seed=cfg.seed,
-        output_subdir=_pe.output_subdir,
-        run_on_train_end=bool(_pe.run_on_train_end),
-        every_n_epochs=int(_pe.every_n_epochs),
-    )
-    final_probing_decoding_eval_cfg = cfg.final_probing_decoding_eval
-    final_probing_decoding_eval_callback = FinalProbingDecodingEvalCallback(
-        eval_cfg=final_probing_decoding_eval_cfg,
-        run_dir=run_dir,
-        storage={name: cfg[name] for name in ("datasets", "models", "outputs")},
-        results_dir=output_dir,
-        output_subdir=final_probing_decoding_eval_cfg.get(
-            "output_subdir",
-            "final_probing_decoding_eval",
-        ),
-    )
+    training_callbacks: list[pl.Callback]
+    if stage_callback is not None:
+        training_callbacks = [stage_callback]
+    else:
+        _pe = cfg.planning_eval
+        training_callbacks = [
+            ModelObjectCallBack(
+                dirpath=run_dir, filename=cfg.model_name,
+                epoch_interval=int(cfg.save_every_n_epochs),
+            ),
+            PlanningEvalCallback(
+                enabled=bool(_pe.enabled), eval_cfg=_pe, run_dir=run_dir,
+                storage={name: cfg[name] for name in ("datasets", "models", "outputs")},
+                results_dir=output_dir, seed=cfg.seed, output_subdir=_pe.output_subdir,
+                run_on_train_end=bool(_pe.run_on_train_end),
+                every_n_epochs=int(_pe.every_n_epochs),
+            ),
+            FinalProbingDecodingEvalCallback(
+                eval_cfg=cfg.final_probing_decoding_eval, run_dir=run_dir,
+                storage={name: cfg[name] for name in ("datasets", "models", "outputs")},
+                results_dir=output_dir,
+                output_subdir=cfg.final_probing_decoding_eval.get("output_subdir", "final_probing_decoding_eval"),
+            ),
+        ]
 
     resume_file = run_dir / "lightning_resume" / "last.ckpt"
     resume_every = cfg.get("resume_every_n_steps", 2000)
-    resume_callbacks = [ResumeCheckpoint(resume_file, resume_every)] if resume_every else []
-    spt.set(requeue_checkpoint=not resume_every)  # lightning_resume/ already holds the full state
+    resume_enabled = bool(resume_every) or stage_callback is not None
+    resume_callbacks = [ResumeCheckpoint(resume_file, resume_every)] if resume_every and stage_callback is None else []
+    spt.set(requeue_checkpoint=not resume_enabled)
 
     trainer = pl.Trainer(
         **cfg.trainer,
         callbacks=[
             *resume_callbacks,
             debug_cleanup_callback,
-            object_dump_callback,
-            planning_eval_callback,
-            final_probing_decoding_eval_callback,
+            *training_callbacks,
             lr_callback,
         ],
         logger=logger,
         enable_checkpointing=False,
     )
 
-    manager_ckpt_path = run_dir / f"{cfg.output_model_name}_weights.ckpt"
+    manager_ckpt_path = run_dir / f"{cfg.model_name}_weights.ckpt"
     if cfg.get("quick_debug", False) or not manager_ckpt_path.exists():
         manager_ckpt_path = None
 
     manager = ResumableManager(
         model_dir=run_dir,
-        resume_file=resume_file if resume_every else None,
+        resume_file=resume_file if resume_enabled else None,
         trainer=trainer,
         module=world_model,
         data=data_module,
@@ -349,4 +367,16 @@ def run(cfg):
     )
 
     manager()
+    result = world_model.model
+    # Release the completed Trainer/optimizer graph before building the next stage.
+    world_model.trainer = None
+    return result
+
+
+@hydra.main(version_base=None, config_path=str(CONFIG_ROOT / "train"), config_name=None)
+def run(cfg):
+    if cfg.get("training_variant") == "layerwise":
+        run_layerwise_training(cfg, run_training)
+    else:
+        run_training(cfg, detach_lower_state=cfg.get("detach_lower_state", False))
 

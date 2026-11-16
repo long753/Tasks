@@ -2,7 +2,7 @@
 defaults:
 - base/fourroom
 - _self_
-output_model_name: fourroom_hjepa_l3
+model_name: fourroom_hjepa_l3
 num_levels: 3
 data:
   dataset:

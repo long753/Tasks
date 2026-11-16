@@ -61,7 +61,7 @@ env = [
     "minigrid",
     "opencv-python",
     "stable_baselines3",
-    "imageio",
+    "imageio[ffmpeg]",
     "jax",  # OGBench AntMaze expert policy (data collection, eval-task generation)
     "flax",
   "distrax",

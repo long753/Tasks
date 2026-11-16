@@ -31,7 +31,7 @@ def reset_variation_space(
             specified in options.
 
     Raises:
-        ValueError: If 'variation' option is not a Sequence.
+        TypeError: If the explicit 'variation' option is not a Sequence.
         AssertionError: If the resulting variation values are outside the space bounds.
     """
 
@@ -39,7 +39,7 @@ def reset_variation_space(
     variation_space.reset()
 
     options = options or {}
-    var_keys = options.get('variation', default_variations or ())
+    var_keys = options.get('variation', tuple(default_variations or ()))
 
     if not isinstance(var_keys, Sequence):
         raise TypeError(

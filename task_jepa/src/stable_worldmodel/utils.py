@@ -11,11 +11,15 @@ from typing import Any
 import numpy as np
 from loguru import logger as logging
 
+from stable_worldmodel.paths import resolve_path
+
 
 def pretraining(
     script_path: str,
     dataset_name: str,
-    output_model_name: str,
+    run_name: str,
+    *,
+    config: str,
     dump_object: bool = True,
     args: str = '',
 ) -> None:
@@ -24,7 +28,8 @@ def pretraining(
     Args:
         script_path: Path to the python script to execute.
         dataset_name: Name of the dataset to use for training.
-        output_model_name: Name to save the resulting model under.
+        run_name: Experiment name used beneath models and outputs.
+        config: Experiment configuration selected by --config.
         dump_object: Whether to export the model object.
         args: Additional CLI arguments for the script.
 
@@ -32,6 +37,7 @@ def pretraining(
         ValueError: If script_path does not exist.
         SystemExit: If the subprocess returns a non-zero exit code.
     """
+    script_path = str(resolve_path(script_path))
     if not os.path.isfile(script_path):
         raise ValueError(f'Script {script_path} does not exist.')
 
@@ -41,8 +47,8 @@ def pretraining(
     env = os.environ.copy()
     env.setdefault('PYTHONUNBUFFERED', '1')
 
-    args = f'{args} ++dump_object={dump_object} dataset_name={dataset_name} output_model_name={output_model_name}'
-    cmd = [sys.executable, script_path] + shlex.split(args)
+    cmd = [sys.executable, script_path, '--config', config, '--run-name', run_name,
+           *shlex.split(args), f'++dump_object={dump_object}', f'data.dataset.name={dataset_name}']
     try:
         subprocess.run(cmd, env=env, check=True)
     except subprocess.CalledProcessError as e:

@@ -3,7 +3,7 @@
 defaults:
 - base/cube
 - _self_
-output_model_name: cube_hwm_l2
+model_name: cube_hwm_l2
 num_levels: 2
 data:
   dataset:

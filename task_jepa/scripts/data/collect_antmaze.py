@@ -157,4 +157,4 @@ def run(cfg: DictConfig):
 
 
 if __name__ == '__main__':
-    run_hydra(run)
+    run_hydra(run, command='data')

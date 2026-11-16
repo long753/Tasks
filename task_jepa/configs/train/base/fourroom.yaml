@@ -21,9 +21,8 @@ data:
       frameskip: 5
       num_steps: ${eval:'${level1.wm.history_size} + ${level1.wm.rollout_n}'}
 quick_debug: false
-output_model_name: model
+model_name: model
 env: fourroom
-subdir: ${env}/${output_model_name}/seed${seed}
 num_workers: 12
 seed: 42
 img_size: 224

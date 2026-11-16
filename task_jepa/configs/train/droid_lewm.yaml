@@ -2,5 +2,5 @@
 defaults:
 - base/droid
 - _self_
-output_model_name: droid_lewm
+model_name: droid_lewm
 num_levels: 1

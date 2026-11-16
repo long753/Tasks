@@ -3,7 +3,7 @@
 defaults:
 - base/ant
 - _self_
-output_model_name: ant_hwm_l2
+model_name: ant_hwm_l2
 num_levels: 2
 data:
   dataset:

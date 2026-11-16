@@ -1,5 +1,4 @@
-policy: null
-output_subdir: final_probing_decoding_eval
+checkpoint: null
 seed: 42
 device: auto
 epochs: 25

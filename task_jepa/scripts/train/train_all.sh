@@ -10,6 +10,27 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 PYTHON="${PYTHON:-python}"
 ENVS=${ENVS:-"ant fourroom cube pusht"}
 
+RUN_NAME_PREFIX=
+ARGS=()
+while (($#)); do
+  case $1 in
+    --run-name)
+      (($# > 1)) || { echo "missing value for --run-name" >&2; exit 2; }
+      RUN_NAME_PREFIX=$2
+      shift 2
+      ;;
+    --run-name=*)
+      RUN_NAME_PREFIX=${1#*=}
+      shift
+      ;;
+    *)
+      ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+
 for env in $ENVS; do
   if [[ $env == droid ]]; then
     models=${MODELS:-"lewm hwm_l2 hjepa_l2"}
@@ -22,8 +43,10 @@ for env in $ENVS; do
   fi
   for model in $models; do
     for seed in $seeds; do
-      "${launch[@]}" "$PYTHON" "$ROOT/scripts/train/train.py" "$@" \
-        --config-name "${env}_${model}" "seed=$seed"
+      run_name="${env}/${env}_${model}/seed${seed}"
+      [[ -z $RUN_NAME_PREFIX ]] || run_name="${RUN_NAME_PREFIX%/}/$run_name"
+      "${launch[@]}" "$PYTHON" "$ROOT/scripts/train/train.py" "${ARGS[@]}" \
+        --config "${env}_${model}" --run-name "$run_name" "seed=$seed"
     done
   done
 done

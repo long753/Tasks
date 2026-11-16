@@ -2,7 +2,7 @@
 defaults:
 - base/fourroom
 - _self_
-output_model_name: fourroom_lewm
+model_name: fourroom_lewm
 num_levels: 1
 trainer:
   max_epochs: 10

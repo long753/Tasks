@@ -25,7 +25,7 @@ from h_jepa.data import (
 from h_jepa.models.hjepa import HJEPA
 from h_jepa.models.module import CLSDecoder
 from h_jepa.models.probers import build_prober
-from h_jepa.runtime import model_run_id, storage_config
+from h_jepa.runtime import storage_config
 from h_jepa.utils import (
     load_training_config_for_checkpoint,
     resolve_model_checkpoint_path,
@@ -63,8 +63,8 @@ def _normalizer_path_for_policy(policy_path: str | Path) -> Path:
     return Path(policy_path).expanduser().parent / NORMALIZER_ARTIFACT_FILENAME
 
 
-def _load_policy(policy, cache_dir):
-    ckpt_path = resolve_model_checkpoint_path(str(policy), cache_dir)
+def _load_policy(checkpoint):
+    ckpt_path = resolve_model_checkpoint_path(checkpoint)
     model = torch.load(ckpt_path, map_location='cpu', weights_only=False)
     train_cfg = load_training_config_for_checkpoint(ckpt_path)
     return model, ckpt_path, train_cfg
@@ -664,7 +664,7 @@ def run_final_probing_decoding_eval(
     cfg,
     *,
     model=None,
-    policy_path: str | Path | None = None,
+    checkpoint_path: str | Path | None = None,
     train_cfg=None,
     normalizer_path: str | Path | None = None,
     output_dir: str | Path | None = None,
@@ -674,29 +674,29 @@ def run_final_probing_decoding_eval(
     cfg = storage_config(cfg)
 
     if model is None:
-        if cfg.get('policy', None) in (None, '', 'null'):
+        if cfg.get('checkpoint', None) in (None, '', 'null'):
             raise ValueError(
-                'cfg.policy must be set when no in-memory model is provided.'
+                '--checkpoint must be set when no in-memory model is provided.'
             )
         model, resolved_policy_path, train_cfg = _load_policy(
-            cfg.policy, cfg.models
+            cfg.checkpoint
         )
-        policy_path = resolved_policy_path
+        checkpoint_path = resolved_policy_path
     else:
         if train_cfg is None:
-            if policy_path is None:
+            if checkpoint_path is None:
                 raise ValueError(
-                    'train_cfg or policy_path is required for in-memory eval.'
+                    'train_cfg or checkpoint_path is required for in-memory eval.'
                 )
-            train_cfg = load_training_config_for_checkpoint(policy_path)
+            train_cfg = load_training_config_for_checkpoint(checkpoint_path)
 
-    policy_path = (
-        None if policy_path is None else Path(policy_path).expanduser()
+    checkpoint_path = (
+        None if checkpoint_path is None else Path(checkpoint_path).expanduser()
     )
     if normalizer_path is None:
-        if policy_path is None:
+        if checkpoint_path is None:
             raise ValueError('normalizer_path is required for in-memory eval.')
-        normalizer_path = _normalizer_path_for_policy(policy_path)
+        normalizer_path = _normalizer_path_for_policy(checkpoint_path)
     normalizer_path = Path(normalizer_path).expanduser()
     if not normalizer_path.exists():
         raise FileNotFoundError(
@@ -708,22 +708,8 @@ def run_final_probing_decoding_eval(
     model = _freeze_model(model)
     _validate_dense_assumptions(model)
 
-    if output_dir is None and cfg.get('output_dir', None) not in (
-        None,
-        '',
-        'null',
-    ):
-        output_dir = cfg.output_dir
-
     if output_dir is None:
-        if policy_path is None:
-            raise ValueError(
-                'output_dir is required when policy_path is not set.'
-            )
-        output_subdir = str(
-            cfg.get('output_subdir', FINAL_PROBING_DECODING_EVAL_DIR)
-        )
-        output_dir = Path(cfg.outputs) / model_run_id(policy_path, cfg.models) / output_subdir
+        output_dir = Path(cfg.outputs) / cfg.run_name
     output_dir = resolve_path(output_dir)
 
     seed = int(cfg.get('seed', 42))
@@ -795,8 +781,7 @@ def run_final_probing_decoding_eval(
     if bool(cfg.get('save_artifacts', True)):
         output_dir.mkdir(parents=True, exist_ok=True)
         _save_decoder_visualizations(output_dir, heads, eval_dataset, device)
-        decoder_run = model_run_id(policy_path, cfg.models) if policy_path is not None else Path(output_dir.name)
-        model_dir = Path(cfg.models) / decoder_run / str(cfg.get("output_subdir", FINAL_PROBING_DECODING_EVAL_DIR))
+        model_dir = Path(cfg.models) / cfg.run_name / "decoders"
         _save_artifacts(heads, output_dir, model_dir, cfg, final_metrics)
         logging.info(
             f'Saved final probing/decoding eval artifacts to {output_dir}'
@@ -836,19 +821,20 @@ class FinalProbingDecodingEvalCallback(pl.Callback):
         if trainer.is_global_zero:
             cfg = OmegaConf.merge(load_probing_config(self.eval_cfg.config_name), self.storage.as_dict())
             cfg = OmegaConf.create(OmegaConf.to_container(cfg, resolve=False))
+            cfg.run_name = pl_module._train_cfg.run_name
             overrides = self.eval_cfg.get('overrides', None)
             if overrides is not None:
                 cfg = OmegaConf.merge(cfg, overrides)
 
-            output_model_name = getattr(
-                pl_module, '_output_model_name', 'model'
+            model_name = getattr(
+                pl_module, '_model_name', 'model'
             )
-            policy_path = self.run_dir / f'{output_model_name}_object.ckpt'
+            policy_path = self.run_dir / f'{model_name}_object.ckpt'
 
             run_final_probing_decoding_eval(
                 cfg,
                 model=pl_module.model,
-                policy_path=policy_path,
+                checkpoint_path=policy_path,
                 train_cfg=getattr(pl_module, '_train_cfg', None),
                 normalizer_path=self.run_dir / NORMALIZER_ARTIFACT_FILENAME,
                 output_dir=self.results_dir / self.output_subdir,

@@ -16,7 +16,7 @@ dataset:
     frameskip: 1
     num_steps: 1
 seed: 42
-policy: null
+checkpoint: null
 dump_eval_trajs_path: null
 load_eval_trajs_path: ${datasets}/eval_trajs/pusht/goal_offset_75_val.pt
 solver:
@@ -54,5 +54,3 @@ eval:
     args:
       goal_state:
         value: goal_state
-output:
-  dir: null
