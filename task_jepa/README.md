@@ -15,7 +15,6 @@
 - `models/`：模型检查点、断点续训状态、训练配置和 `normalizer.pt`。
 - `outputs/`：日志、评估指标、视频、图表和运行缓存。
 
-根目录 `models/` 是模型产物目录；网络结构源码位于 `src/h_jepa/models/`。变更记录位于 `CHANGLOG.md`。本项目以普通目录纳入主仓库，克隆主仓库即可获得源码，不需要初始化子模块。`datasets/`、`models/` 和 `outputs/` 不上传，需要在本地准备。
 
 ## Setup
 
@@ -30,9 +29,9 @@ python -m pip install -e ".[train,env]"
 ```
 
 
-## 训练与评估
+## 训练模型
 
-训练基线：
+训练标准 H-JEPA：
 ```bash
 python scripts/train/train.py \
     --config fourroom_hjepa_l4 \
@@ -64,16 +63,45 @@ python scripts/train/train.py \
     --run-name fourroom_l4_wam
 ```
 
-接下来，我们来实现 action 和 未来状态的联合生成训练：
 
-在当前项目中，我们使用 h-jepa 的方法实现了多层 predictor 的 end2end 训练，这个 predictor（也就是所谓的 world model）无法直接生成 action。因此，在 eval 阶段，我们使用了一种基于 mpc 的方法实现了 planning。但是该方式生成 action 需要进行大量无关计算，为此我设计了下面的改进算法。
+## 测试模型
+单次测试
+```bash
+CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=6 \
+python scripts/eval/eval_once.py \
+  --config fourroom_l4 \
+  --checkpoint ./models/h_jepa/fourroom/fourrom_hjepa_l4/seed42/fourroom_hjepa_l4_object.ckpt \
+  --task-index 0 \
+  --run-name fourroom_sg_epoch1_task0
+```
 
-我计划新增一个 action head，这个 action head 可以接收当前的 z_t 和 predictor 预测的 z_{t+1} 然后直接生成真实的 action。具体流程如下：模型使用 encoder 将当前状态编码为 z_t，不对动作进行编码；随后，将 z_t 输入给 predictor 预测 z'_{t+1}，并用这个 z'_{t+1} 与真实的后续观测编码得到的 z_{t+1} 做 MSE Loss；然后将 z'_{t+1} 和 z_t 输入给 action head,让他直接输出真实的 action，用这个 action 和真实的 action 做 mse loss。此外，我们依旧要使用原始 JEPA 中的 R。通过这样的方式，训练一个 action head，在推理的时候，我们就先使用 encoder 编码状态得到 z_t 然后使用 predictor 预测 z'_{t+1}，将 z_t 和 z'_{t+1} 输入给 action head 得到 action；机器人执行 action 后再次获得 z_{t+1} 循环往复下去即可。
+定量测试
+```bash
+CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=6 \
+python scripts/eval/eval.py \
+  --config fourroom_l4 \
+  --checkpoint ./models/h_jepa/fourroom/fourrom_hjepa_l4/seed42/fourroom_hjepa_l4_object.ckpt \
+  --run-name fourroom_sg_epoch1_eval50
+```
+其中，第一行指定测试使用的显卡；run-name 指定输出文件夹的名字
 
-实现方式：
-1. 在 jepa-wam 中实现具体的代码逻辑
-2. 在 scripts/train 中复用 train.py 实现模型训练
-3. 在 scripts/eval 中复用 eval_once.py 和 eval.py 实现模型评估
 
-请你仔细想一下实现细节，是否还有问题？如果没有问题，请你告诉我你计划如何实现这个任务？
+## H-JEPA 复现与分析
+### antMaze
+
+### fourroom
+
+### pusht
+
+### cube
+
+
+## 层级解偶
+### 方案一：基于 Stop Gradient 的解偶模型
+
+
+### 方案二：基于逐层训练的解偶模型
+
+
+## action head 联合训练
 

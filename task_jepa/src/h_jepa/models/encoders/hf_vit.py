@@ -33,7 +33,7 @@ def create_hf_vit(
     size: str = "tiny",
     patch_size: int = 16,
     image_size: int = 224,
-    use_mask_token: bool = True,
+    use_mask_token: bool = False,
     **kwargs,
 ) -> ViTModel:
     if size not in VIT_SIZE_CONFIGS:

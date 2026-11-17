@@ -8,6 +8,7 @@ from torch import nn
 
 from h_jepa.hierarchical_solver import LevelCostModel
 from h_jepa.hjepa_utils import create_world_model, hjepa_forward
+from h_jepa.models.encoders.hf_vit import create_hf_vit
 from h_jepa.models.jepa import JEPA
 from h_jepa.models.module import ConditionalBlock
 
@@ -108,6 +109,23 @@ class StateStopGradientTests(unittest.TestCase):
         torch.set_num_threads(1)
         self.addCleanup(torch.set_num_threads, threads)
         torch.manual_seed(123)
+
+    def test_unmasked_vit_backward_reaches_all_trainable_parameters(self):
+        encoder = create_hf_vit(
+            image_size=4,
+            patch_size=2,
+            hidden_size=8,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            intermediate_size=16,
+        )
+        embeddings = encoder(torch.randn(2, 3, 4, 4)).last_hidden_state
+        embeddings.square().mean().backward()
+        missing = [
+            name for name, parameter in encoder.named_parameters()
+            if parameter.requires_grad and parameter.grad is None
+        ]
+        self.assertEqual(missing, [], f"DDP cannot reduce unused ViT parameters: {missing}")
 
     def test_each_loss_only_updates_its_own_state_encoder(self):
         for fusion in (False, True):
