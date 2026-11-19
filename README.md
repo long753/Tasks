@@ -8,8 +8,4 @@ This repository brings together my learning tasks and experiments including:
 - [task_siglip](task_siglip/): Train and evaluate SigLIP models for image–text alignment and retrieval.
 - [task_smolval](task_smolval/): Fine-tune SmolVLA for a Panda robot's cube-to-tray task in MuJoCo and compare performance before and after fine-tuning.
 
-## Getting started
-
-Each task has its own environment, dependencies, and run instructions; see its README before installing or running it. `task_jepa` is included as a regular directory, not a Git submodule.
-
-Datasets, model checkpoints, experiment outputs, and local credentials are excluded from version control. Prepare the required data and models locally as described in each task.
+Each task has its own environment, dependencies, and run instructions; see its README before installing or running it. 
