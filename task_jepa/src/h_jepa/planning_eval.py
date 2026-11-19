@@ -1,16 +1,18 @@
+import csv
+import json
 import os
 import shlex
 import subprocess
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, Protocol, cast
 
 import hydra
 import numpy as np
 import torch
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, OmegaConf, open_dict
 from sklearn import preprocessing
 from torch.nn.attention import SDPBackend, sdpa_kernel
 from torchvision.transforms import v2 as transforms
@@ -26,6 +28,7 @@ from h_jepa.eval_config_utils import (
     _is_hierarchical_solver,
 )
 from h_jepa.hierarchical_solver import build_hierarchical_solver
+from h_jepa.models.hjepa import HJEPA
 from h_jepa.runtime import storage_config
 from h_jepa.utils import resolve_model_checkpoint_path
 from stable_worldmodel.paths import CONFIG_ROOT, PROJECT_ROOT, StoragePaths, resolve_path
@@ -371,8 +374,6 @@ def _run_chunked_eval(
     metrics.yaml aggregates the chunks with the keys of the unchunked eval.
     A live observer reruns completed chunks instead of skipping their execution.
     """
-    import json
-
     payload = torch.load(
         load_eval_trajs_path, map_location='cpu', weights_only=False
     )
@@ -644,10 +645,72 @@ def run_planning_eval(
     # wall_clock) for the planner-FLOPs Pareto analysis.
     solve_records = pop_solve_records(getattr(policy, 'solver', None))
     if solve_records:
-        import json
-
         (resolved_results_dir / 'planning_compute.json').write_text(
             json.dumps(solve_records)
         )
 
     return metrics_to_save
+
+
+def evaluate_prefixes(cfg: DictConfig, levels: Sequence[int]) -> None:
+    """Evaluate proper prefixes of one checkpoint on the same fixed tasks."""
+    cfg = storage_config(cfg)
+    if 'clips' in cfg or not _is_hierarchical_solver(cfg):
+        raise ValueError('--prefix-levels requires a hierarchical simulation eval configuration')
+    if not cfg.get('load_eval_trajs_path') or cfg.get('dump_eval_trajs_path') is not None:
+        raise ValueError('--prefix-levels requires a saved evaluation task file, not task generation')
+    if not levels or len(set(levels)) != len(levels) or min(levels) < 1:
+        raise ValueError('--prefix-levels must select distinct positive depths')
+    model = load_model(cfg)
+    if not isinstance(model, HJEPA):
+        raise TypeError('--prefix-levels requires a complete H-JEPA checkpoint')
+    if max(levels) >= model.num_levels:
+        raise ValueError(
+            f'--prefix-levels can only select proper prefixes (1–{model.num_levels - 1}) '
+            f'of this {model.num_levels}-layer checkpoint'
+        )
+    if any(
+        f'level{i}' not in cfg.solver.solvers or f'level{i}' not in cfg.hierarchical_plan_config
+        for i in range(1, max(levels) + 1)
+    ):
+        raise ValueError('The evaluation configuration is missing solver or planning settings for a requested depth')
+
+    rows = []
+    for depth in levels:
+        prefix_cfg = cast(DictConfig, OmegaConf.merge(cfg, {'run_name': f'{cfg.run_name}/prefix_l{depth}'}))
+        with open_dict(prefix_cfg):
+            prefix_cfg.pop('prefix_levels', None)
+        with open_dict(prefix_cfg.solver.solvers), open_dict(prefix_cfg.hierarchical_plan_config):
+            _drop_levels_above_model(prefix_cfg, depth)
+        results_dir = resolve_results_dir(prefix_cfg)
+        saved_config = results_dir / 'eval_config.yaml'
+        if (results_dir / 'chunks').exists() and (
+            not saved_config.is_file() or saved_config.read_text() != OmegaConf.to_yaml(prefix_cfg, resolve=True)
+        ):
+            raise ValueError(
+                f'Cannot reuse prefix chunks with a different evaluation config: {results_dir}. Use a new --run-name.'
+            )
+
+        prefix = HJEPA([model.get_level(i) for i in range(1, depth + 1)])
+        if (artifact := getattr(model, 'normalizer_artifact', None)) is not None:
+            prefix.normalizer_artifact = artifact
+        metrics = run_planning_eval(prefix_cfg, model=prefix)
+        compute_path = results_dir / 'planning_compute.json'
+        records = json.loads(compute_path.read_text()) if compute_path.is_file() else []
+        solve_time = sum(r['wall_clock'] for r in records)
+        successes = metrics['episode_successes']
+        rows.append({
+            'depth': depth,
+            'tasks': len(successes),
+            'success_rate_pct': metrics['success_rate'],
+            'mean_steps_on_success': metrics['steps_to_success_success_only'] if any(successes) else None,
+            'solver_time_s': solve_time,
+            'evaluation_time_s': metrics['evaluation_time'],
+        })
+
+    summary_path = resolve_results_dir(cfg) / 'prefix_summary.csv'
+    with summary_path.open('w', newline='', encoding='utf-8') as stream:
+        writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f'Prefix comparison: {summary_path}')

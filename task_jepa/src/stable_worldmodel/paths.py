@@ -69,6 +69,8 @@ def run_hydra(
             "--training-mode", choices=("e2e", "sg", "layerwise"), default="e2e",
             help="e2e (default): joint training; sg: state stop-gradient; layerwise: train and freeze one level at a time",
         )
+    if command == "eval":
+        parser.add_argument("--prefix-levels", metavar="1,2,3", help="Evaluate proper model prefixes of these depths")
     if command == "eval_once":
         parser.add_argument("--task-index", type=int, default=0, help="Zero-based index in the saved evaluation task file")
         parser.add_argument("--video-fps", type=int, default=10, help="Playback frames per second")
@@ -102,6 +104,8 @@ def run_hydra(
             "training_variant": "--training-mode",
             "detach_lower_state": "--training-mode",
         })
+    if command == "eval":
+        obsolete["prefix_levels"] = "--prefix-levels"
     if command == "data":
         # Data collection policy config is an expert policy, not a model input.
         obsolete.pop("policy")
@@ -122,7 +126,12 @@ def run_hydra(
         name = resolve_run_name(args.run_name, prefix=args.config or command)
     except ValueError as error:
         parser.error(str(error))
-    values: dict[str, str | int] = {**paths.as_dict(), "run_name": name}
+    values: dict[str, str | int | list[int]] = {**paths.as_dict(), "run_name": name}
+    if command == "eval" and args.prefix_levels is not None:
+        try:
+            values["prefix_levels"] = [int(depth) for depth in args.prefix_levels.split(",")]
+        except ValueError:
+            parser.error("--prefix-levels must be a comma-separated list of integers, e.g. 1,2,3")
     if command == "train":
         detach_lower_state = args.training_mode != "e2e"
         values.update({

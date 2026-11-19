@@ -29,7 +29,7 @@ python -m pip install -e ".[train,env]"
 ```
 
 
-## 训练模型
+## 模型训练
 
 训练标准 H-JEPA：
 ```bash
@@ -76,7 +76,7 @@ python scripts/train/train.py \
 ```
 
 
-## 测试模型
+## 实验测试
 单次测试
 ```bash
 CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=6 \
@@ -92,11 +92,20 @@ python scripts/eval/eval_once.py \
 CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=6 \
 python scripts/eval/eval.py \
   --config fourroom_l4 \
-  --checkpoint ./models/fourroom_l4_sg_b32/fourroom_hjepa_l4_epoch_1_object.ckpt \
-  --run-name fourroom_sg_l4
+  --checkpoint ./models/layerwise_l4_seed32/fourroom_hjepa_l4_object.ckpt \
+  --run-name fourroom_layerwise_l4
 ```
-其中，第一行指定测试使用的显卡；run-name 指定输出文件夹的名字
 
+
+解偶消融实验：
+```bash
+CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=6 \
+python scripts/eval/eval.py \
+  --config fourroom_l4 \
+  --checkpoint ./models/h_jepa/fourroom/fourroom_hjepa_l4/seed42/fourroom_hjepa_l4_object.ckpt \
+  --run-name fourroom_prefix \
+  --prefix-levels 1,2,3
+```
 
 ## H-JEPA 复现与分析
 ### antMaze
@@ -109,6 +118,8 @@ python scripts/eval/eval.py \
 
 
 ## 层级解偶
+为实现推理端的自适应层级，需要先实现训练时各层级的 encoder, predictor, action_encoder 的解偶。在原始 H-JEPA 中，最显著的层级耦合在于每一层的 encoder 都复用了前一层的 encoder，并且没有使用 no_grad 指令，使得当前层的 encoder 会影响前面几层 encoder 的梯度。虽然这样的设计可以使前几层的 encoder 编码更适合后续 encoder 编码的特征向量，但对于自适应层级而言，这样设计的劣势大于优势。为此，我的第一个方案也是最显而易见的方案，就是把各层 encoder 之间的梯度给断开。然而，由于 end2end 训练架构，各个层级之间必然无法完全实现解偶。为此，我的第二个方案则是逐层训练，训练好一层后就冻结该层的 encoder, predictor, action_encoder 等参数，使用该层的参数继续完成后续的训练。
+
 ### 方案一：基于 Stop Gradient 的解偶模型
 
 
@@ -116,4 +127,9 @@ python scripts/eval/eval.py \
 
 
 ## action head 联合训练
+为了展现出 JEPA 带来的 **轻量化** 优势，我认为需要使用类似当前 world action model 的 action head 联合训练。我将现有的 WAM 的 world model 和 action head 的联合方式分为4类：
 
+1. world model 和 action head 和为一体，训练一个模型联合生成未来状态和动作，典型代表就是 ZeroWAM
+2. world model 和 action head 和为一体，训练阶段使用一个模型联合生成未来状态和动作，推理阶段只输出动作，典型代表就是 Fast-WAM
+3. world model 和 action head 分开，先使用 world model 生成预期的未来状态，再使用 action head 生成动作，典型代表是 VPP2
+4. world model 和 action head 分开，先使用 action head 生成候选动作，再使用 world model 生成动作产生的后果，并在线评估最好的 action (有点像 MPC 了)，典型代表是
