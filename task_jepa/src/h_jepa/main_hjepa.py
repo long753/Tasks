@@ -6,11 +6,13 @@ import hydra
 import lightning as pl
 import stable_pretraining as spt
 import torch
+from lightning.pytorch.loggers import Logger
 from loguru import logger as logging
 from omegaconf import DictConfig, OmegaConf, open_dict
 from stable_pretraining.callbacks.hf_models import HuggingFaceCheckpointCallback
 from torch.utils.data import DataLoader
 
+from h_jepa.cuda_memory_monitor import CudaMemoryMonitor
 from h_jepa.data import (
     Compose,
     build_hdf5_dataset,
@@ -22,6 +24,8 @@ from h_jepa.data import (
 from h_jepa.final_probing_decoding_eval import FinalProbingDecodingEvalCallback
 from h_jepa.hjepa_utils import create_world_model, hjepa_forward
 from h_jepa.layerwise_training import run_layerwise_training
+from h_jepa.models.hjepa import HJEPA
+from h_jepa.models.jepa import FusionEncoder
 from h_jepa.runtime import storage_config
 from h_jepa.utils import (
     DebugArtifactCleanupCallback,
@@ -281,7 +285,6 @@ def run_training(
     spt.set(cache_dir=str(output_dir / "spt"))
     logging.info(f"🫆🫆🫆 Run ID: {run_id} 🫆🫆🫆")
 
-    logger = None
     if cfg.wandb.enabled and not cfg.get("quick_debug", False):
         from lightning.pytorch.loggers import WandbLogger
 
@@ -297,6 +300,14 @@ def run_training(
         from lightning.pytorch.loggers import CSVLogger
 
         logger = CSVLogger(save_dir=str(output_dir), name="lightning_logs")
+
+    loggers: list[Logger] = [logger]
+    if cfg.get("tensorboard", False):
+        from lightning.pytorch.loggers import TensorBoardLogger
+
+        loggers.append(TensorBoardLogger(
+            save_dir=str(output_dir), name="tensorboard", default_hp_metric=False, flush_secs=10,
+        ))
 
     run_dir.mkdir(parents=True, exist_ok=True)
     with open(run_dir / "config.yaml", "w") as f:
@@ -339,16 +350,22 @@ def run_training(
     resume_enabled = bool(resume_every) or stage_callback is not None
     resume_callbacks = [ResumeCheckpoint(resume_file, resume_every)] if resume_every and stage_callback is None else []
     spt.set(requeue_checkpoint=not resume_enabled)
+    memory_callbacks = []
+    if cfg.get("cuda_memory_monitor", False):
+        encoder = cast(HJEPA, world_model.model).get_level(1).encoder
+        image_encoder = encoder.pixel_encoder if isinstance(encoder, FusionEncoder) else encoder
+        memory_callbacks.append(CudaMemoryMonitor(output_dir, image_encoder))
 
     trainer = pl.Trainer(
         **cfg.trainer,
         callbacks=[
+            *memory_callbacks,
             *resume_callbacks,
             debug_cleanup_callback,
             *training_callbacks,
             lr_callback,
         ],
-        logger=logger,
+        logger=loggers,
         enable_checkpointing=False,
     )
 

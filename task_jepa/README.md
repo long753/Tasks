@@ -49,10 +49,22 @@ python scripts/train/train.py \
 
 训练基于逐层训练的解偶模型：
 ```bash
-python scripts/train/train.py \
-    --config fourroom_hjepa_l4 \
-    --training-mode layerwise \
-    --run-name fourroom_l4_layerwise
+CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=6,7 \
+python -m torch.distributed.run --standalone --nproc_per_node=2 \
+  scripts/train/train.py \
+  --config fourroom_hjepa_l4 \
+  --training-mode layerwise \
+  --run-name layerwise_l4_seed32 \
+  trainer.devices=2 \
+  trainer.max_epochs=1 \
+  loader.batch_size=32 \
+  num_workers=0 \
+  loader.persistent_workers=false \
+  loader.prefetch_factor=null \
+  +tensorboard=true \
+  +cuda_memory_monitor=true \
+  planning_eval.enabled=false \
+  final_probing_decoding_eval.enabled=false
 ```
 
 action generation and latent feature function join training:
@@ -72,7 +84,7 @@ python scripts/eval/eval_once.py \
   --config fourroom_l4 \
   --checkpoint ./models/h_jepa/fourroom/fourrom_hjepa_l4/seed42/fourroom_hjepa_l4_object.ckpt \
   --task-index 0 \
-  --run-name fourroom_sg_epoch1_task0
+  --run-name fourroom_hjepa_l4
 ```
 
 定量测试
@@ -80,8 +92,8 @@ python scripts/eval/eval_once.py \
 CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=6 \
 python scripts/eval/eval.py \
   --config fourroom_l4 \
-  --checkpoint ./models/h_jepa/fourroom/fourrom_hjepa_l4/seed42/fourroom_hjepa_l4_object.ckpt \
-  --run-name fourroom_sg_epoch1_eval50
+  --checkpoint ./models/fourroom_l4_sg_b32/fourroom_hjepa_l4_epoch_1_object.ckpt \
+  --run-name fourroom_sg_l4
 ```
 其中，第一行指定测试使用的显卡；run-name 指定输出文件夹的名字
 

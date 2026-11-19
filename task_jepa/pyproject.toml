@@ -51,6 +51,8 @@ train = [
     "matplotlib",
 ]
 
+tensorboard = ["tensorboard>=2.16,<3"]
+
 env = [
     "mujoco==3.14.0",  # mujoco versions change episode outcomes (Cube, AntMaze)
     "dm_control==1.0.47",
