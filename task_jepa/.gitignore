@@ -13,8 +13,8 @@ __pycache__/
 /docs/
 
 # Agents and their logs
-AGENTS.md
-CHANGELOG.md
+# AGENTS.md
+# CHANGELOG.md
 
 # local environment dumps
 environment*.json

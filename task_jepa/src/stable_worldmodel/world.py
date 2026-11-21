@@ -933,6 +933,7 @@ class World:
         goal_state_mode: str = 'dataset_full',
         *,
         on_step: Callable[["World", int], None] | None = None,
+        stop_on_success: bool = False,
     ) -> dict:
         """Evaluate the policy starting from states sampled from a dataset.
 
@@ -945,6 +946,7 @@ class World:
             callables: Optional list of method calls to setup the env.
             on_step: Optional observer called after state restoration (step 0)
                 and after each executed step. Disabled during ordinary evaluation.
+            stop_on_success: Stop once every environment has reached its goal.
 
         Returns:
             Dictionary containing success rates and other metrics.
@@ -1231,6 +1233,8 @@ class World:
             self.envs.sync_env._autoreset_envs = np.zeros((self.num_envs,))
             if on_step is not None:
                 on_step(self, i + 1)
+            if stop_on_success and results['episode_successes'].all():
+                break
 
         n_episodes = len(ep_idx_arr)
 

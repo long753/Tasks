@@ -377,6 +377,11 @@ class WorldModelPolicy(BasePolicy):
         self._steps_taken = 0
         self._policy_call_count = 0
 
+    @property
+    def needs_plan(self) -> bool:
+        """Whether the next action requires a solver call."""
+        return not self._action_buffer
+
     def _remaining_eval_steps(self) -> int | None:
         """Return the remaining environment-step budget, if one is set."""
         if self.eval_budget is None:
@@ -403,7 +408,7 @@ class WorldModelPolicy(BasePolicy):
         obs = self._prepare_info(obs)
         # need to replan if action buffer is empty
         assert self._action_buffer is not None
-        if len(self._action_buffer) == 0:
+        if self.needs_plan:
             remaining_steps = self._remaining_eval_steps()
             if remaining_steps is not None and remaining_steps <= 0:
                 raise RuntimeError('Evaluation step budget exhausted.')

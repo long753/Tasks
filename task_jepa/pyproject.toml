@@ -91,7 +91,7 @@ build-backend = "uv_build"
 
 [tool.uv.build-backend]
 module-root = "src"
-module-name = ["stable_worldmodel", "h_jepa"]
+module-name = ["stable_worldmodel", "h_jepa", "jepa_wam"]
 source-exclude = [
     "**/.mypy_cache/**",
     "**/__pycache__/**",
@@ -119,6 +119,7 @@ indent-style = "space"
 
 [tool.ty.environment]
 root = ["./src"]
+extra-paths = ["./scripts/eval"]  # Direct eval script launchers can import sibling entry points.
 python-version = "3.11"
 
 # 针对 PyTorch 模型和训练代码放宽特定规则
