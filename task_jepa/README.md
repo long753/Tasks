@@ -128,3 +128,40 @@ python scripts/train/train_wam.py --run-name fourroom_wam_train \
 ```
 
 模型权重保存为 `models/<run-name>/last.pt`，训练与验证指标保存在 `outputs/<run-name>/metrics.csv`。
+
+### 测试脚本
+
+用训练好的 `last.pt` 直接评估，不需要单独提供 `normalizer.pt`。
+
+```bash
+ckpt=models/wam_seed42/last.pt
+
+# 单任务：输出真实执行和目标画面的并排录像
+python scripts/eval/eval_wam_once.py --checkpoint "$ckpt" \
+  --task-index 0 --run-name fourroom_wam_demo
+
+# 定量评估：50 个固定任务，不录视频
+python scripts/eval/eval_wam.py --checkpoint "$ckpt" \
+  --run-name fourroom_wam_eval
+
+# 同一张 CUDA 卡上依次对比 WAM、LeWM 和 H-JEPA L4
+base=models/h_jepa/fourroom
+python scripts/eval/eval_cost.py --mode both --run-name fourroom_cost_repro \
+  --model wam wam "$ckpt" \
+  --model lewm fourroom_flat "$base/fourroom_lewm/seed42/fourroom_lewm_object.ckpt" \
+  --model hjepa_l4 fourroom_l4 "$base/fourroom_hjepa_l4/seed42/fourroom_hjepa_l4_object.ckpt"
+```
+
+结果写入 `outputs/<run-name>/`：WAM 单独评估看 `metrics.yaml`，录像在 `videos/`；成本对比看 `summary.csv`，明细见 `closed_loop.csv` 和 `replay.csv`。
+
+### 测试结果
+
+正式对比在 RTX 4060 Laptop GPU 上完成：50 个固定任务，按目标图像对应的末帧位置 `goal_xy` 判成功，首次成功即停，最多 210 步。重规划延迟来自 10 段固定轨迹重放，不执行仿真。
+
+| 模型 | 成功率 | 总推理时间（s） | 推理时间/步（ms） | 闭环总耗时（s） | 重规划 P50 / P95（ms） |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| WAM | 34%（17/50） | 353.5 | 38.0 | 474.7 | 25.8 / 30.1 |
+| LeWM | 40%（20/50） | 6042.2 | 622.2 | 6158.7 | 6226.2 / 12343.4 |
+| H-JEPA L4 | 86%（43/50） | 2391.7 | 254.1 | 2503.3 | 2814.2 / 3317.3 |
+
+推理时间含观测预处理、规划或读取缓存动作，不含仿真；每步耗时按实际执行步数平均，闭环总耗时另含环境恢复和仿真。WAM 每步推理耗时约为 H-JEPA L4 的 **1/6.7**，但成功率低 **52 个百分点**，不是同等成功率下的加速。该表的成功判定与上文使用原 `goal_state` 的解耦实验不同。

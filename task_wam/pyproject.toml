@@ -1,0 +1,62 @@
+[project]
+name = "task-wam"
+version = "0.1.0"
+description = "Task-conditioned JEPA World Action Model"
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+license = "MIT"
+dependencies = [
+    "torch==2.7.1",
+    "torchvision==0.22.1",
+    "transformers==5.22.2",
+    "numpy>=2,<3",
+    "gymnasium==1.2.3",
+    "h5py>=3.12,<4",
+    "hdf5plugin>=5,<8",
+    "omegaconf>=2.3,<2.4",
+    "pillow>=10",
+    "imageio[ffmpeg]>=2.36,<3",
+    "loguru>=0.7,<1",
+    "rich>=13",
+    "tqdm>=4.66,<5",
+]
+
+[build-system]
+requires = ["uv_build>=0.10,<0.11"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = ["jepa_wam", "stable_worldmodel"]
+module-root = "src"
+
+[dependency-groups]
+dev = ["ruff", "ty"]
+
+[tool.uv]
+environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+extend-select = ["I", "UP"]
+
+[tool.ty.environment]
+root = ["./src"]
+extra-paths = ["./scripts"]
+python-version = "3.11"
+
+[[tool.ty.overrides]]
+include = ["src", "scripts"]
+
+[tool.ty.overrides.rules]
+incompatible-mutable-override = "ignore"
