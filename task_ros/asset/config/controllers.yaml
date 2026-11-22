@@ -12,25 +12,27 @@ controller_manager:
 arm_controller:
   ros__parameters:
     joints:
-      - arm_joint_1
-      - arm_joint_2
-      - arm_joint_3
-      - arm_joint_4
-      - arm_joint_5
-      - arm_joint_6
+      - fer_joint1
+      - fer_joint2
+      - fer_joint3
+      - fer_joint4
+      - fer_joint5
+      - fer_joint6
+      - fer_joint7
     command_interfaces: [position]
     state_interfaces: [position, velocity]
     constraints:
       goal_time: 1.0
       stopped_velocity_tolerance: 0.05
-      arm_joint_1: {goal: 0.015}
-      arm_joint_2: {goal: 0.015}
-      arm_joint_3: {goal: 0.015}
-      arm_joint_4: {goal: 0.015}
-      arm_joint_5: {goal: 0.015}
-      arm_joint_6: {goal: 0.015}
+      fer_joint1: {goal: 0.015}
+      fer_joint2: {goal: 0.015}
+      fer_joint3: {goal: 0.015}
+      fer_joint4: {goal: 0.015}
+      fer_joint5: {goal: 0.015}
+      fer_joint6: {goal: 0.015}
+      fer_joint7: {goal: 0.015}
 
 gripper_controller:
   ros__parameters:
-    joints: [left_finger_joint, right_finger_joint]
+    joints: [fer_finger_joint1, fer_finger_joint2]
     interface_name: effort

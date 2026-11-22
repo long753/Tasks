@@ -31,11 +31,16 @@ def start_workcell(context):
         str(Path(get_package_prefix('gz_ros2_control')) / 'lib'),
         os.environ.get('IGN_GAZEBO_SYSTEM_PLUGIN_PATH', ''),
     ]
+    resource_paths = [
+        str(Path(get_package_prefix('franka_description')) / 'share'),
+        os.environ.get('IGN_GAZEBO_RESOURCE_PATH', ''),
+    ]
     simulator = ExecuteProcess(
         cmd=['ign', 'gazebo', '-r', '-v', '3', *mode, str(ASSET / 'worlds' / 'workcell.sdf')],
         name='workcell_simulator', output='screen',
         additional_env={
             'IGN_GAZEBO_SYSTEM_PLUGIN_PATH': os.pathsep.join(filter(None, plugin_paths)),
+            'IGN_GAZEBO_RESOURCE_PATH': os.pathsep.join(filter(None, resource_paths)),
         },
     )
     state_publisher = Node(

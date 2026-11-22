@@ -2,8 +2,19 @@
 <robot name="mobile_manipulator" xmlns:xacro="http://www.ros.org/wiki/xacro">
   <xacro:arg name="controllers_file" default=""/>
 
-  <!-- The spawn pose for base_link is z=0.101 m: wheels and caster balls reach z=0.001 m. -->
-  <xacro:property name="nominal_base_z" value="0.101"/>
+  <xacro:include filename="$(find franka_description)/robots/common/franka_arm.xacro"/>
+  <xacro:include filename="$(find franka_description)/end_effectors/common/franka_hand.xacro"/>
+  <xacro:include filename="$(find franka_description)/end_effectors/common/utils.xacro"/>
+  <!-- Franka's package uses FER for the original Panda. -->
+  <xacro:property name="fer_config" value="$(find franka_description)/robots/fer"/>
+  <xacro:property name="fer_inertials" value="${xacro.load_yaml(fer_config + '/inertials.yaml')}"/>
+  <!-- FER 1.0.1 link4 violates the principal-moment triangle inequality in SDFormat.
+       Add 0.0012 kg·m² to each diagonal, preserving its COM and principal axes. -->
+  <xacro:property name="link4_inertia" value="${fer_inertials.link4.inertia}"/>
+  <xacro:property name="link4_sim_inertia" value="${dict(link4_inertia,
+      xx=link4_inertia.xx + 0.0012, yy=link4_inertia.yy + 0.0012, zz=link4_inertia.zz + 0.0012)}"/>
+  <xacro:property name="fer_sim_inertials" value="${xacro.dotify(dict(fer_inertials,
+      link4=dict(fer_inertials.link4, inertia=link4_sim_inertia)))}"/>
 
   <!-- Principal inertias are about the local shape axes at each link COM. -->
   <xacro:macro name="box_inertia" params="mass x y z">
@@ -67,6 +78,14 @@
       <origin xyz="${xyz}" rpy="0 0 0"/>
       <geometry><sphere radius="${radius}"/></geometry>
     </collision>
+  </xacro:macro>
+
+  <xacro:macro name="controlled_joint" params="name interface initial">
+    <joint name="${name}">
+      <command_interface name="${interface}"/>
+      <state_interface name="position"><param name="initial_value">${initial}</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
   </xacro:macro>
 
   <!-- base_link is the drive axle midpoint, 0.101 m above the nominal ground. -->
@@ -175,15 +194,15 @@
     <origin xyz="0.36 0 0.199" rpy="0 0 0"/>
   </joint>
 
-  <!-- The mast is offset rearward of the shoulder so its collision stays clear of arm_link_1. -->
+  <!-- The pedestal starts at the chassis top. Its upper face mounts Panda link 0. -->
   <link name="arm_mount_link">
     <inertial>
-      <origin xyz="0.045 0 0.235" rpy="0 0 0"/>
+      <origin xyz="0.05 0 0.06" rpy="0 0 0"/>
       <mass value="2.0"/>
-      <xacro:box_inertia mass="2.0" x="0.17" y="0.14" z="0.44"/>
+      <xacro:box_inertia mass="2.0" x="0.25" y="0.22" z="0.12"/>
     </inertial>
-    <xacro:box_geometry name="arm_mast" x="0.17" y="0.14" z="0.44"
-                        xyz="0.045 0 0.235" rpy="0 0 0" rgba="0.26 0.28 0.32 1"/>
+    <xacro:box_geometry name="arm_pedestal" x="0.25" y="0.22" z="0.12"
+                        xyz="0.05 0 0.06" rpy="0 0 0" rgba="0.26 0.28 0.32 1"/>
   </link>
 
   <joint name="arm_mount_joint" type="fixed">
@@ -192,170 +211,19 @@
     <origin xyz="0 0 0.18" rpy="0 0 0"/>
   </joint>
 
-  <!-- Shoulder is at base_link (0.09, 0, 0.649): world z=0.750 m at the nominal spawn height. -->
-  <joint name="arm_joint_1" type="revolute">
+  <xacro:franka_arm arm_id="fer" connected_to=""
+                   joint_limits="${xacro.load_yaml(fer_config + '/joint_limits.yaml')}"
+                   inertials="${fer_sim_inertials}"
+                   kinematics="${xacro.load_yaml(fer_config + '/kinematics.yaml')}"
+                   dynamics="${xacro.load_yaml(fer_config + '/dynamics.yaml')}"/>
+  <joint name="panda_mount_joint" type="fixed">
     <parent link="arm_mount_link"/>
-    <child link="arm_link_1"/>
-    <origin xyz="0.09 0 0.469" rpy="0 0 0"/>
-    <axis xyz="0 0 1"/>
-    <limit lower="-3.141592653589793" upper="3.141592653589793" effort="60" velocity="2.0"/>
-    <dynamics damping="0.4" friction="0.05"/>
+    <child link="fer_link0"/>
+    <origin xyz="0.09 0 0.12" rpy="0 0 0"/>
   </joint>
-
-  <link name="arm_link_1">
-    <!-- The link passes over the 0.72 m tabletop when docking. -->
-    <inertial>
-      <origin xyz="0.22 0 0" rpy="0 0 0"/>
-      <mass value="1.35"/>
-      <xacro:box_inertia mass="1.35" x="0.34" y="0.10" z="0.040"/>
-    </inertial>
-    <xacro:box_geometry name="upper_arm" x="0.34" y="0.10" z="0.040"
-                        xyz="0.22 0 0" rpy="0 0 0" rgba="0.72 0.45 0.12 1"/>
-  </link>
-
-  <joint name="arm_joint_2" type="revolute">
-    <parent link="arm_link_1"/>
-    <child link="arm_link_2"/>
-    <origin xyz="0.38 0 0" rpy="0 0 0"/>
-    <axis xyz="0 1 0"/>
-    <limit lower="-1.5707963267948966" upper="1.5707963267948966" effort="55" velocity="2.0"/>
-    <dynamics damping="0.4" friction="0.05"/>
-  </joint>
-
-  <link name="arm_link_2">
-    <!-- Keep the forearm clear of the non-adjacent wrist yoke in the folded pose. -->
-    <inertial>
-      <origin xyz="0.20 0 0" rpy="0 0 0"/>
-      <mass value="1.10"/>
-      <xacro:box_inertia mass="1.10" x="0.32" y="0.055" z="0.055"/>
-    </inertial>
-    <xacro:box_geometry name="forearm" x="0.32" y="0.055" z="0.055"
-                        xyz="0.20 0 0" rpy="0 0 0" rgba="0.72 0.45 0.12 1"/>
-  </link>
-
-  <joint name="arm_joint_3" type="revolute">
-    <parent link="arm_link_2"/>
-    <child link="wrist_roll_link"/>
-    <origin xyz="0.36 0 0" rpy="0 0 0"/>
-    <axis xyz="0 1 0"/>
-    <limit lower="-0.20" upper="2.50" effort="40" velocity="2.5"/>
-    <dynamics damping="0.25" friction="0.03"/>
-  </joint>
-
-  <link name="wrist_roll_link">
-    <inertial>
-      <origin xyz="0.035 0 0" rpy="0 0 0"/>
-      <mass value="0.32"/>
-      <xacro:box_inertia mass="0.32" x="0.06" y="0.075" z="0.075"/>
-    </inertial>
-    <xacro:box_geometry name="wrist_yoke_1" x="0.06" y="0.075" z="0.075"
-                        xyz="0.035 0 0" rpy="0 0 0" rgba="0.38 0.40 0.44 1"/>
-  </link>
-
-  <joint name="arm_joint_4" type="revolute">
-    <parent link="wrist_roll_link"/>
-    <child link="wrist_pitch_link"/>
-    <origin xyz="0.07 0 0" rpy="0 0 0"/>
-    <axis xyz="1 0 0"/>
-    <limit lower="-3.141592653589793" upper="3.141592653589793" effort="25" velocity="3.0"/>
-    <dynamics damping="0.15" friction="0.02"/>
-  </joint>
-
-  <link name="wrist_pitch_link">
-    <inertial>
-      <origin xyz="0.03 0 0" rpy="0 0 0"/>
-      <mass value="0.26"/>
-      <xacro:box_inertia mass="0.26" x="0.06" y="0.05" z="0.05"/>
-    </inertial>
-    <xacro:box_geometry name="wrist_yoke_2" x="0.06" y="0.05" z="0.05"
-                        xyz="0.03 0 0" rpy="0 0 0" rgba="0.38 0.40 0.44 1"/>
-  </link>
-
-  <joint name="arm_joint_5" type="revolute">
-    <parent link="wrist_pitch_link"/>
-    <child link="wrist_roll_2_link"/>
-    <origin xyz="0.07 0 0" rpy="0 0 0"/>
-    <axis xyz="0 1 0"/>
-    <!-- With q2+q3+q5=+pi/2, the palm +X approach axis points downward (-Z). -->
-    <limit lower="-2.60" upper="2.60" effort="25" velocity="3.0"/>
-    <dynamics damping="0.15" friction="0.02"/>
-  </joint>
-
-  <link name="wrist_roll_2_link">
-    <inertial>
-      <origin xyz="0.03 0 0" rpy="0 0 0"/>
-      <mass value="0.22"/>
-      <xacro:box_inertia mass="0.22" x="0.06" y="0.065" z="0.065"/>
-    </inertial>
-    <xacro:box_geometry name="wrist_yoke_3" x="0.06" y="0.065" z="0.065"
-                        xyz="0.03 0 0" rpy="0 0 0" rgba="0.38 0.40 0.44 1"/>
-  </link>
-
-  <joint name="arm_joint_6" type="revolute">
-    <parent link="wrist_roll_2_link"/>
-    <child link="palm_link"/>
-    <origin xyz="0.07 0 0" rpy="0 0 0"/>
-    <axis xyz="1 0 0"/>
-    <limit lower="-3.141592653589793" upper="3.141592653589793" effort="20" velocity="3.0"/>
-    <dynamics damping="0.10" friction="0.02"/>
-  </joint>
-
-  <link name="palm_link">
-    <inertial>
-      <origin xyz="0.0275 0 0" rpy="0 0 0"/>
-      <mass value="0.30"/>
-      <xacro:box_inertia mass="0.30" x="0.055" y="0.116" z="0.070"/>
-    </inertial>
-    <xacro:box_geometry name="palm" x="0.055" y="0.116" z="0.070"
-                        xyz="0.0275 0 0" rpy="0 0 0" rgba="0.25 0.27 0.30 1"/>
-  </link>
-
-  <!-- Positive displacement moves each finger outward: +Y on left, -Y on right. -->
-  <joint name="left_finger_joint" type="prismatic">
-    <parent link="palm_link"/>
-    <child link="left_finger_link"/>
-    <origin xyz="0.055 0.012 0" rpy="0 0 0"/>
-    <axis xyz="0 1 0"/>
-    <limit lower="0" upper="0.036" effort="10" velocity="0.10"/>
-    <dynamics damping="1.0" friction="0.05"/>
-  </joint>
-
-  <link name="left_finger_link">
-    <inertial>
-      <origin xyz="0.055 0.003 0" rpy="0 0 0"/>
-      <mass value="0.08"/>
-      <xacro:box_inertia mass="0.08" x="0.10" y="0.006" z="0.025"/>
-    </inertial>
-    <xacro:box_geometry name="left_grip_pad" x="0.10" y="0.006" z="0.025"
-                        xyz="0.055 0.003 0" rpy="0 0 0" rgba="0.08 0.08 0.08 1"/>
-  </link>
-
-  <joint name="right_finger_joint" type="prismatic">
-    <parent link="palm_link"/>
-    <child link="right_finger_link"/>
-    <origin xyz="0.055 -0.012 0" rpy="0 0 0"/>
-    <axis xyz="0 -1 0"/>
-    <limit lower="0" upper="0.036" effort="10" velocity="0.10"/>
-    <dynamics damping="1.0" friction="0.05"/>
-  </joint>
-
-  <link name="right_finger_link">
-    <inertial>
-      <origin xyz="0.055 -0.003 0" rpy="0 0 0"/>
-      <mass value="0.08"/>
-      <xacro:box_inertia mass="0.08" x="0.10" y="0.006" z="0.025"/>
-    </inertial>
-    <xacro:box_geometry name="right_grip_pad" x="0.10" y="0.006" z="0.025"
-                        xyz="0.055 -0.003 0" rpy="0 0 0" rgba="0.08 0.08 0.08 1"/>
-  </link>
-
-  <!-- tool0 is the midpoint between pad contact centers, 0.110 m along palm +X. -->
-  <link name="tool0"/>
-  <joint name="tool0_joint" type="fixed">
-    <parent link="palm_link"/>
-    <child link="tool0"/>
-    <origin xyz="0.110 0 0" rpy="0 0 0"/>
-  </joint>
+  <xacro:franka_hand arm_id="fer" connected_to="fer_link8" ee_id="franka_hand_white"
+                    ee_inertials="${xacro.load_yaml('$(find franka_description)/end_effectors/franka_hand/inertials.yaml')}"
+                    rpy_ee="0 0 ${-pi/4}"/>
 
   <gazebo reference="front_caster_link">
     <mu1>0.05</mu1>
@@ -365,11 +233,11 @@
     <mu1>0.05</mu1>
     <mu2>0.05</mu2>
   </gazebo>
-  <gazebo reference="left_finger_link">
+  <gazebo reference="fer_leftfinger">
     <mu1>2.0</mu1>
     <mu2>2.0</mu2>
   </gazebo>
-  <gazebo reference="right_finger_link">
+  <gazebo reference="fer_rightfinger">
     <mu1>2.0</mu1>
     <mu2>2.0</mu2>
   </gazebo>
@@ -429,46 +297,17 @@
     <hardware>
       <plugin>gz_ros2_control/GazeboSimSystem</plugin>
     </hardware>
-    <joint name="arm_joint_1">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
-      <state_interface name="velocity"/>
-    </joint>
-    <joint name="arm_joint_2">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">-1.25</param></state_interface>
-      <state_interface name="velocity"/>
-    </joint>
-    <joint name="arm_joint_3">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">2.3</param></state_interface>
-      <state_interface name="velocity"/>
-    </joint>
-    <joint name="arm_joint_4">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
-      <state_interface name="velocity"/>
-    </joint>
-    <joint name="arm_joint_5">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">-1.05</param></state_interface>
-      <state_interface name="velocity"/>
-    </joint>
-    <joint name="arm_joint_6">
-      <command_interface name="position"/>
-      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
-      <state_interface name="velocity"/>
-    </joint>
-    <joint name="left_finger_joint">
-      <command_interface name="effort"/>
-      <state_interface name="position"><param name="initial_value">0.036</param></state_interface>
-      <state_interface name="velocity"/>
-    </joint>
-    <joint name="right_finger_joint">
-      <command_interface name="effort"/>
-      <state_interface name="position"><param name="initial_value">0.036</param></state_interface>
-      <state_interface name="velocity"/>
-    </joint>
+    <!-- Panda starts folded; revolute initial values are radians, prismatic values are metres. -->
+    <xacro:controlled_joint name="fer_joint1" interface="position" initial="0.0"/>
+    <xacro:controlled_joint name="fer_joint2" interface="position" initial="${-pi/4}"/>
+    <xacro:controlled_joint name="fer_joint3" interface="position" initial="0.0"/>
+    <xacro:controlled_joint name="fer_joint4" interface="position" initial="${-3*pi/4}"/>
+    <xacro:controlled_joint name="fer_joint5" interface="position" initial="0.0"/>
+    <xacro:controlled_joint name="fer_joint6" interface="position" initial="${pi/2}"/>
+    <xacro:controlled_joint name="fer_joint7" interface="position" initial="${pi/4}"/>
+    <!-- Fortress does not physically implement URDF mimic; send equal effort to both fingers. -->
+    <xacro:controlled_joint name="fer_finger_joint1" interface="effort" initial="0.04"/>
+    <xacro:controlled_joint name="fer_finger_joint2" interface="effort" initial="0.04"/>
     <!-- Native DiffDrive owns wheel actuation; ros2_control publishes their read-only states. -->
     <joint name="left_wheel_joint">
       <state_interface name="position"/>
