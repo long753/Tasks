@@ -1,0 +1,485 @@
+<?xml version="1.0"?>
+<robot name="mobile_manipulator" xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:arg name="controllers_file" default=""/>
+
+  <!-- The spawn pose for base_link is z=0.101 m: wheels and caster balls reach z=0.001 m. -->
+  <xacro:property name="nominal_base_z" value="0.101"/>
+
+  <!-- Principal inertias are about the local shape axes at each link COM. -->
+  <xacro:macro name="box_inertia" params="mass x y z">
+    <inertia ixx="${mass * (y * y + z * z) / 12.0}"
+             ixy="0" ixz="0"
+             iyy="${mass * (x * x + z * z) / 12.0}"
+             iyz="0"
+             izz="${mass * (x * x + y * y) / 12.0}"/>
+  </xacro:macro>
+
+  <!-- Cylinder principal axis is local +Z; rotate the inertial frame with the geometry when needed. -->
+  <xacro:macro name="cylinder_inertia" params="mass radius length">
+    <inertia ixx="${mass * (3.0 * radius * radius + length * length) / 12.0}"
+             ixy="0" ixz="0"
+             iyy="${mass * (3.0 * radius * radius + length * length) / 12.0}"
+             iyz="0"
+             izz="${mass * radius * radius / 2.0}"/>
+  </xacro:macro>
+
+  <xacro:macro name="sphere_inertia" params="mass radius">
+    <inertia ixx="${2.0 * mass * radius * radius / 5.0}"
+             ixy="0" ixz="0"
+             iyy="${2.0 * mass * radius * radius / 5.0}"
+             iyz="0"
+             izz="${2.0 * mass * radius * radius / 5.0}"/>
+  </xacro:macro>
+
+  <!-- Visuals and collisions deliberately share the same primitive and pose. -->
+  <xacro:macro name="box_geometry" params="name x y z xyz rpy rgba">
+    <visual name="${name}_visual">
+      <origin xyz="${xyz}" rpy="${rpy}"/>
+      <geometry><box size="${x} ${y} ${z}"/></geometry>
+      <material name="${name}_material"><color rgba="${rgba}"/></material>
+    </visual>
+    <collision name="${name}_collision">
+      <origin xyz="${xyz}" rpy="${rpy}"/>
+      <geometry><box size="${x} ${y} ${z}"/></geometry>
+    </collision>
+  </xacro:macro>
+
+  <xacro:macro name="cylinder_geometry" params="name radius length xyz rpy rgba">
+    <visual name="${name}_visual">
+      <origin xyz="${xyz}" rpy="${rpy}"/>
+      <geometry><cylinder radius="${radius}" length="${length}"/></geometry>
+      <material name="${name}_material"><color rgba="${rgba}"/></material>
+    </visual>
+    <collision name="${name}_collision">
+      <origin xyz="${xyz}" rpy="${rpy}"/>
+      <geometry><cylinder radius="${radius}" length="${length}"/></geometry>
+    </collision>
+  </xacro:macro>
+
+  <xacro:macro name="sphere_geometry" params="name radius xyz rgba">
+    <visual name="${name}_visual">
+      <origin xyz="${xyz}" rpy="0 0 0"/>
+      <geometry><sphere radius="${radius}"/></geometry>
+      <material name="${name}_material"><color rgba="${rgba}"/></material>
+    </visual>
+    <collision name="${name}_collision">
+      <origin xyz="${xyz}" rpy="0 0 0"/>
+      <geometry><sphere radius="${radius}"/></geometry>
+    </collision>
+  </xacro:macro>
+
+  <!-- base_link is the drive axle midpoint, 0.101 m above the nominal ground. -->
+  <link name="base_link">
+    <inertial>
+      <origin xyz="0 0 0.10" rpy="0 0 0"/>
+      <mass value="18.0"/>
+      <xacro:box_inertia mass="18.0" x="0.58" y="0.39" z="0.16"/>
+    </inertial>
+    <xacro:box_geometry name="chassis" x="0.58" y="0.39" z="0.16"
+                        xyz="0 0 0.10" rpy="0 0 0" rgba="0.16 0.18 0.22 1"/>
+  </link>
+
+  <link name="left_wheel_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="1.5707963267948966 0 0"/>
+      <mass value="1.20"/>
+      <xacro:cylinder_inertia mass="1.20" radius="0.10" length="0.05"/>
+    </inertial>
+    <xacro:cylinder_geometry name="left_wheel" radius="0.10" length="0.05"
+                             xyz="0 0 0" rpy="1.5707963267948966 0 0" rgba="0.05 0.05 0.05 1"/>
+  </link>
+
+  <joint name="left_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="left_wheel_link"/>
+    <origin xyz="0 0.23 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <dynamics damping="0.02" friction="0.0"/>
+  </joint>
+
+  <link name="right_wheel_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="1.5707963267948966 0 0"/>
+      <mass value="1.20"/>
+      <xacro:cylinder_inertia mass="1.20" radius="0.10" length="0.05"/>
+    </inertial>
+    <xacro:cylinder_geometry name="right_wheel" radius="0.10" length="0.05"
+                             xyz="0 0 0" rpy="1.5707963267948966 0 0" rgba="0.05 0.05 0.05 1"/>
+  </link>
+
+  <joint name="right_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="right_wheel_link"/>
+    <origin xyz="0 -0.23 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <dynamics damping="0.02" friction="0.0"/>
+  </joint>
+
+  <!-- Fixed, low-friction ball casters support the front and rear without steering actuation. -->
+  <link name="front_caster_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.12"/>
+      <xacro:sphere_inertia mass="0.12" radius="0.04"/>
+    </inertial>
+    <xacro:sphere_geometry name="front_caster" radius="0.04" xyz="0 0 0" rgba="0.10 0.10 0.12 1"/>
+  </link>
+
+  <joint name="front_caster_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="front_caster_link"/>
+    <origin xyz="0.25 0 -0.06" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <dynamics damping="0.01" friction="0.0"/>
+  </joint>
+
+  <link name="rear_caster_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.12"/>
+      <xacro:sphere_inertia mass="0.12" radius="0.04"/>
+    </inertial>
+    <xacro:sphere_geometry name="rear_caster" radius="0.04" xyz="0 0 0" rgba="0.10 0.10 0.12 1"/>
+  </link>
+
+  <joint name="rear_caster_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="rear_caster_link"/>
+    <origin xyz="-0.25 0 -0.06" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <dynamics damping="0.01" friction="0.0"/>
+  </joint>
+
+  <!-- laser_link is a preserved optical frame at the forward face of its housing. -->
+  <link name="laser_link">
+    <inertial>
+      <origin xyz="-0.03 0 0" rpy="0 0 0"/>
+      <mass value="0.18"/>
+      <xacro:box_inertia mass="0.18" x="0.06" y="0.06" z="0.04"/>
+    </inertial>
+    <visual name="laser_housing_visual">
+      <origin xyz="-0.03 0 0" rpy="0 0 0"/>
+      <geometry><box size="0.06 0.06 0.04"/></geometry>
+      <material name="laser_housing_material"><color rgba="0.08 0.30 0.42 1"/></material>
+      <visibility_flags>0x00000001</visibility_flags>
+    </visual>
+    <collision name="laser_housing_collision">
+      <origin xyz="-0.03 0 0" rpy="0 0 0"/>
+      <geometry><box size="0.06 0.06 0.04"/></geometry>
+    </collision>
+  </link>
+
+  <joint name="laser_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="laser_link"/>
+    <origin xyz="0.36 0 0.199" rpy="0 0 0"/>
+  </joint>
+
+  <!-- The mast is offset rearward of the shoulder so its collision stays clear of arm_link_1. -->
+  <link name="arm_mount_link">
+    <inertial>
+      <origin xyz="0.045 0 0.235" rpy="0 0 0"/>
+      <mass value="2.0"/>
+      <xacro:box_inertia mass="2.0" x="0.17" y="0.14" z="0.44"/>
+    </inertial>
+    <xacro:box_geometry name="arm_mast" x="0.17" y="0.14" z="0.44"
+                        xyz="0.045 0 0.235" rpy="0 0 0" rgba="0.26 0.28 0.32 1"/>
+  </link>
+
+  <joint name="arm_mount_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="arm_mount_link"/>
+    <origin xyz="0 0 0.18" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Shoulder is at base_link (0.09, 0, 0.649): world z=0.750 m at the nominal spawn height. -->
+  <joint name="arm_joint_1" type="revolute">
+    <parent link="arm_mount_link"/>
+    <child link="arm_link_1"/>
+    <origin xyz="0.09 0 0.469" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.141592653589793" upper="3.141592653589793" effort="60" velocity="2.0"/>
+    <dynamics damping="0.4" friction="0.05"/>
+  </joint>
+
+  <link name="arm_link_1">
+    <inertial>
+      <origin xyz="0.22 0 0" rpy="0 0 0"/>
+      <mass value="1.35"/>
+      <xacro:box_inertia mass="1.35" x="0.34" y="0.10" z="0.10"/>
+    </inertial>
+    <xacro:box_geometry name="upper_arm" x="0.34" y="0.10" z="0.10"
+                        xyz="0.22 0 0" rpy="0 0 0" rgba="0.72 0.45 0.12 1"/>
+  </link>
+
+  <joint name="arm_joint_2" type="revolute">
+    <parent link="arm_link_1"/>
+    <child link="arm_link_2"/>
+    <origin xyz="0.38 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-1.5707963267948966" upper="1.5707963267948966" effort="55" velocity="2.0"/>
+    <dynamics damping="0.4" friction="0.05"/>
+  </joint>
+
+  <link name="arm_link_2">
+    <inertial>
+      <origin xyz="0.20 0 0" rpy="0 0 0"/>
+      <mass value="1.10"/>
+      <xacro:box_inertia mass="1.10" x="0.32" y="0.085" z="0.085"/>
+    </inertial>
+    <xacro:box_geometry name="forearm" x="0.32" y="0.085" z="0.085"
+                        xyz="0.20 0 0" rpy="0 0 0" rgba="0.72 0.45 0.12 1"/>
+  </link>
+
+  <joint name="arm_joint_3" type="revolute">
+    <parent link="arm_link_2"/>
+    <child link="wrist_roll_link"/>
+    <origin xyz="0.36 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-0.20" upper="2.50" effort="40" velocity="2.5"/>
+    <dynamics damping="0.25" friction="0.03"/>
+  </joint>
+
+  <link name="wrist_roll_link">
+    <inertial>
+      <origin xyz="0.035 0 0" rpy="0 0 0"/>
+      <mass value="0.32"/>
+      <xacro:box_inertia mass="0.32" x="0.06" y="0.075" z="0.075"/>
+    </inertial>
+    <xacro:box_geometry name="wrist_yoke_1" x="0.06" y="0.075" z="0.075"
+                        xyz="0.035 0 0" rpy="0 0 0" rgba="0.38 0.40 0.44 1"/>
+  </link>
+
+  <joint name="arm_joint_4" type="revolute">
+    <parent link="wrist_roll_link"/>
+    <child link="wrist_pitch_link"/>
+    <origin xyz="0.07 0 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-3.141592653589793" upper="3.141592653589793" effort="25" velocity="3.0"/>
+    <dynamics damping="0.15" friction="0.02"/>
+  </joint>
+
+  <link name="wrist_pitch_link">
+    <inertial>
+      <origin xyz="0.03 0 0" rpy="0 0 0"/>
+      <mass value="0.26"/>
+      <xacro:box_inertia mass="0.26" x="0.06" y="0.070" z="0.070"/>
+    </inertial>
+    <xacro:box_geometry name="wrist_yoke_2" x="0.06" y="0.070" z="0.070"
+                        xyz="0.03 0 0" rpy="0 0 0" rgba="0.38 0.40 0.44 1"/>
+  </link>
+
+  <joint name="arm_joint_5" type="revolute">
+    <parent link="wrist_pitch_link"/>
+    <child link="wrist_roll_2_link"/>
+    <origin xyz="0.07 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <!-- With q2+q3+q5=+pi/2, the palm +X approach axis points downward (-Z). -->
+    <limit lower="-2.60" upper="2.60" effort="25" velocity="3.0"/>
+    <dynamics damping="0.15" friction="0.02"/>
+  </joint>
+
+  <link name="wrist_roll_2_link">
+    <inertial>
+      <origin xyz="0.03 0 0" rpy="0 0 0"/>
+      <mass value="0.22"/>
+      <xacro:box_inertia mass="0.22" x="0.06" y="0.065" z="0.065"/>
+    </inertial>
+    <xacro:box_geometry name="wrist_yoke_3" x="0.06" y="0.065" z="0.065"
+                        xyz="0.03 0 0" rpy="0 0 0" rgba="0.38 0.40 0.44 1"/>
+  </link>
+
+  <joint name="arm_joint_6" type="revolute">
+    <parent link="wrist_roll_2_link"/>
+    <child link="palm_link"/>
+    <origin xyz="0.07 0 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-3.141592653589793" upper="3.141592653589793" effort="20" velocity="3.0"/>
+    <dynamics damping="0.10" friction="0.02"/>
+  </joint>
+
+  <link name="palm_link">
+    <inertial>
+      <origin xyz="0.0275 0 0" rpy="0 0 0"/>
+      <mass value="0.30"/>
+      <xacro:box_inertia mass="0.30" x="0.055" y="0.080" z="0.070"/>
+    </inertial>
+    <xacro:box_geometry name="palm" x="0.055" y="0.080" z="0.070"
+                        xyz="0.0275 0 0" rpy="0 0 0" rgba="0.25 0.27 0.30 1"/>
+  </link>
+
+  <!-- Positive displacement moves each finger outward: +Y on left, -Y on right. -->
+  <joint name="left_finger_joint" type="prismatic">
+    <parent link="palm_link"/>
+    <child link="left_finger_link"/>
+    <origin xyz="0.055 0.012 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="0" upper="0.036" effort="10" velocity="0.10"/>
+    <dynamics damping="1.0" friction="0.05"/>
+  </joint>
+
+  <link name="left_finger_link">
+    <inertial>
+      <origin xyz="0.055 0.003 0" rpy="0 0 0"/>
+      <mass value="0.08"/>
+      <xacro:box_inertia mass="0.08" x="0.10" y="0.006" z="0.025"/>
+    </inertial>
+    <xacro:box_geometry name="left_grip_pad" x="0.10" y="0.006" z="0.025"
+                        xyz="0.055 0.003 0" rpy="0 0 0" rgba="0.08 0.08 0.08 1"/>
+  </link>
+
+  <joint name="right_finger_joint" type="prismatic">
+    <parent link="palm_link"/>
+    <child link="right_finger_link"/>
+    <origin xyz="0.055 -0.012 0" rpy="0 0 0"/>
+    <axis xyz="0 -1 0"/>
+    <limit lower="0" upper="0.036" effort="10" velocity="0.10"/>
+    <dynamics damping="1.0" friction="0.05"/>
+  </joint>
+
+  <link name="right_finger_link">
+    <inertial>
+      <origin xyz="0.055 -0.003 0" rpy="0 0 0"/>
+      <mass value="0.08"/>
+      <xacro:box_inertia mass="0.08" x="0.10" y="0.006" z="0.025"/>
+    </inertial>
+    <xacro:box_geometry name="right_grip_pad" x="0.10" y="0.006" z="0.025"
+                        xyz="0.055 -0.003 0" rpy="0 0 0" rgba="0.08 0.08 0.08 1"/>
+  </link>
+
+  <!-- tool0 is the midpoint between pad contact centers, 0.110 m along palm +X. -->
+  <link name="tool0"/>
+  <joint name="tool0_joint" type="fixed">
+    <parent link="palm_link"/>
+    <child link="tool0"/>
+    <origin xyz="0.110 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <gazebo reference="front_caster_link">
+    <mu1>0.05</mu1>
+    <mu2>0.05</mu2>
+  </gazebo>
+  <gazebo reference="rear_caster_link">
+    <mu1>0.05</mu1>
+    <mu2>0.05</mu2>
+  </gazebo>
+  <gazebo reference="left_finger_link">
+    <mu1>2.0</mu1>
+    <mu2>2.0</mu2>
+  </gazebo>
+  <gazebo reference="right_finger_link">
+    <mu1>2.0</mu1>
+    <mu2>2.0</mu2>
+  </gazebo>
+
+  <gazebo reference="laser_link">
+    <sensor name="front_gpu_lidar" type="gpu_lidar">
+      <always_on>true</always_on>
+      <update_rate>15</update_rate>
+      <visualize>false</visualize>
+      <topic>/scan</topic>
+      <ignition_frame_id>laser_link</ignition_frame_id>
+      <!-- The housing is flag 0x1; this mask omits it while retaining ordinary world visuals. -->
+      <visibility_mask>0xFFFFFFFE</visibility_mask>
+      <ray>
+        <scan>
+          <horizontal>
+            <samples>720</samples>
+            <resolution>1</resolution>
+            <min_angle>-1.5707963267948966</min_angle>
+            <max_angle>1.5707963267948966</max_angle>
+          </horizontal>
+          <vertical>
+            <samples>1</samples>
+            <resolution>1</resolution>
+            <min_angle>0</min_angle>
+            <max_angle>0</max_angle>
+          </vertical>
+        </scan>
+        <range>
+          <min>0.10</min>
+          <max>12.0</max>
+          <resolution>0.01</resolution>
+        </range>
+      </ray>
+    </sensor>
+  </gazebo>
+
+  <gazebo>
+    <self_collide>true</self_collide>
+    <plugin filename="ignition-gazebo-sensors-system" name="ignition::gazebo::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <plugin filename="ignition-gazebo-diff-drive-system" name="ignition::gazebo::systems::DiffDrive">
+      <left_joint>left_wheel_joint</left_joint>
+      <right_joint>right_wheel_joint</right_joint>
+      <wheel_separation>0.46</wheel_separation>
+      <wheel_radius>0.10</wheel_radius>
+      <topic>/cmd_vel</topic>
+      <odom_topic>/odom</odom_topic>
+      <tf_topic>/tf</tf_topic>
+      <frame_id>odom</frame_id>
+      <child_frame_id>base_link</child_frame_id>
+    </plugin>
+    <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+      <robot_param>robot_description</robot_param>
+      <robot_param_node>robot_state_publisher</robot_param_node>
+      <parameters>$(arg controllers_file)</parameters>
+    </plugin>
+  </gazebo>
+
+  <ros2_control name="GazeboSimSystem" type="system">
+    <hardware>
+      <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+    </hardware>
+    <joint name="arm_joint_1">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="arm_joint_2">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">-1.25</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="arm_joint_3">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">2.3</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="arm_joint_4">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="arm_joint_5">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">-1.05</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="arm_joint_6">
+      <command_interface name="position"/>
+      <state_interface name="position"><param name="initial_value">0.0</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="left_finger_joint">
+      <command_interface name="effort"/>
+      <state_interface name="position"><param name="initial_value">0.036</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="right_finger_joint">
+      <command_interface name="effort"/>
+      <state_interface name="position"><param name="initial_value">0.036</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+    <!-- Native DiffDrive owns wheel actuation; ros2_control publishes their read-only states. -->
+    <joint name="left_wheel_joint">
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="right_wheel_joint">
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+  </ros2_control>
+</robot>
