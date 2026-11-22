@@ -22,19 +22,21 @@ sudo apt install ignition-fortress ros-humble-ros-gz ros-humble-xacro \
   ros-humble-franka-description
 ```
 
-From the repository root, start the world, spawn the robot, and bring up the ROS 2 bridge and controllers:
+From the repository root, synchronize the project's uv environment and start the workcell:
 
 ```bash
 cd task_ros
-source /opt/ros/humble/setup.bash
-ros2 launch asset/launch/workcell.launch.py
+uv sync --locked
+bash scripts/ros_uv.sh ros2 launch scripts/workcell.launch.py
 ```
+
+`uv` uses its own CPython 3.10 and installs Python dependencies into `task_ros/.venv`. The wrapper loads APT-provided ROS libraries from `/opt/ros/humble` in the child process only; no terminal activation, system `pip`, or Conda changes are needed. Use `bash scripts/ros_uv.sh python your_script.py` for a ROS Python node and `uv add <package>` for a new project dependency.
 
 Append `gui:=false` to omit the desktop window; the GPU lidar still needs a rendering context. Stop with `Ctrl+C`.
 
 The [world](task_ros/asset/worlds/workcell.sdf) has an 8 × 6 m floor, a blue start at `(-3, 0)`, and a green dock at `(1.82, 0)` facing world +X. A static obstacle leaves north and south routes. The red obstacle runs on a physical Y-axis slider at `x=0`, with a ±1.1 m target and a 12 s simulation-time period. The worktable is 0.72 m high; the yellow 50 mm block starts at `(2.43, -0.19, 0.745)` and the tray is centered at `(2.43, 0.19)`.
 
-The [robot model](task_ros/asset/robots/mobile_manipulator.urdf.xacro) includes differential drive, a forward 2D lidar and the original seven-axis Franka Panda, named `fer` in the [official description package](https://frankarobotics.github.io/docs/doc/franka_description/README.html). It uses the stock Franka Hand with two simulated finger effort inputs. The [control configuration](task_ros/asset/config/controllers.yaml) exposes these ROS 2 interfaces:
+The [robot model](task_ros/asset/robots/mobile_manipulator.urdf.xacro) includes differential drive, a forward 2D lidar and the original seven-axis Franka Panda, named `fer` in the [official description package](https://frankarobotics.github.io/docs/doc/franka_description/README.html). It uses the stock Franka Hand with two simulated finger effort inputs. The [control configuration](task_ros/config/controllers.yaml) exposes these ROS 2 interfaces:
 
 | Interface | Use |
 | --- | --- |
@@ -48,9 +50,9 @@ The Panda tool frame is `fer_hand_tcp`, with +Z along the fingers and up to 80 m
 
 ### Edit the workcell
 
-- **Layout:** edit `asset/worlds/workcell.sdf`. Move a whole model with its `<model>` pose; if you resize a shape, update both its collision and visual geometry. The blue start marker is visual only; to move the robot too, update `-x`, `-y`, and `-Y` in `asset/launch/workcell.launch.py`.
-- **Moving obstacle:** edit the amplitude and period in `asset/launch/moving_obstacle.py`. Keep the target inside the slider joint limits in the SDF.
-- **Robot:** edit the mount transform `panda_mount_joint` and the simulated starting joint values in `asset/robots/mobile_manipulator.urdf.xacro`, not the installed package. If you rename or reorder controlled joints, update `asset/config/controllers.yaml` and command publishers to match.
-- **ROS topics:** edit `asset/config/bridge.yaml` when a Gazebo topic is renamed or its ROS counterpart should differ.
+- **Layout:** edit `asset/worlds/workcell.sdf`. Move a whole model with its `<model>` pose; if you resize a shape, update both its collision and visual geometry. The blue start marker is visual only; to move the robot too, update `-x`, `-y`, and `-Y` in `scripts/workcell.launch.py`.
+- **Moving obstacle:** edit the amplitude and period in `scripts/moving_obstacle.py`. Keep the target inside the slider joint limits in the SDF.
+- **Robot:** edit the mount transform `panda_mount_joint` and the simulated starting joint values in `asset/robots/mobile_manipulator.urdf.xacro`, not the installed package. If you rename or reorder controlled joints, update `config/controllers.yaml` and command publishers to match.
+- **ROS topics:** edit `config/bridge.yaml` when a Gazebo topic is renamed or its ROS counterpart should differ.
 
 Validate a world edit with `ign sdf -k asset/worlds/workcell.sdf`, then relaunch and inspect clearance and contact in Gazebo. For a robot edit, expand the Xacro to URDF and run `check_urdf` on the result before relaunching.

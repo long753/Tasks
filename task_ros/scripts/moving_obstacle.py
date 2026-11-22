@@ -11,11 +11,13 @@ from std_msgs.msg import Float64
 class MovingObstacle(Node):
     def __init__(self):
         super().__init__(
-            'workcell_moving_obstacle',
-            parameter_overrides=[Parameter('use_sim_time', value=True)],
+            "workcell_moving_obstacle",
+            parameter_overrides=[Parameter("use_sim_time", value=True)],
         )
         self.publisher = self.create_publisher(
-            Float64, '/workcell/moving_obstacle/set_position', 1,
+            Float64,
+            "/workcell/moving_obstacle/set_position",
+            1,
         )
         self.start = None
         self.timer = self.create_timer(0.05, self.update_position)
@@ -40,5 +42,5 @@ def main():
         rclpy.try_shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
