@@ -1,0 +1,20 @@
+[project]
+name = "task-ros"
+version = "0.1.0"
+requires-python = ">=3.10,<3.11"
+# Python dependencies of the APT-provided ROS Humble launch and CLI packages.
+# The ROS packages themselves are loaded from /opt/ros/humble, not PyPI.
+dependencies = [
+    "argcomplete",
+    "importlib-metadata",
+    "lark",
+    "netifaces",
+    "numpy<2",
+    "packaging",
+    "pyyaml",
+    "setuptools<82",  # Humble still uses pkg_resources.
+]
+
+[tool.uv]
+package = false
+python-preference = "only-managed"
