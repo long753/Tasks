@@ -32,13 +32,14 @@
   </xacro:macro>
 
   <!-- Visuals and collisions deliberately share the same primitive and pose. -->
+  <!-- Let libsdformat name collisions from their links so it retains the Gazebo friction extensions. -->
   <xacro:macro name="box_geometry" params="name x y z xyz rpy rgba">
     <visual name="${name}_visual">
       <origin xyz="${xyz}" rpy="${rpy}"/>
       <geometry><box size="${x} ${y} ${z}"/></geometry>
       <material name="${name}_material"><color rgba="${rgba}"/></material>
     </visual>
-    <collision name="${name}_collision">
+    <collision>
       <origin xyz="${xyz}" rpy="${rpy}"/>
       <geometry><box size="${x} ${y} ${z}"/></geometry>
     </collision>
@@ -50,7 +51,7 @@
       <geometry><cylinder radius="${radius}" length="${length}"/></geometry>
       <material name="${name}_material"><color rgba="${rgba}"/></material>
     </visual>
-    <collision name="${name}_collision">
+    <collision>
       <origin xyz="${xyz}" rpy="${rpy}"/>
       <geometry><cylinder radius="${radius}" length="${length}"/></geometry>
     </collision>
@@ -62,7 +63,7 @@
       <geometry><sphere radius="${radius}"/></geometry>
       <material name="${name}_material"><color rgba="${rgba}"/></material>
     </visual>
-    <collision name="${name}_collision">
+    <collision>
       <origin xyz="${xyz}" rpy="0 0 0"/>
       <geometry><sphere radius="${radius}"/></geometry>
     </collision>
@@ -115,7 +116,7 @@
     <dynamics damping="0.02" friction="0.0"/>
   </joint>
 
-  <!-- Fixed, low-friction ball casters support the front and rear without steering actuation. -->
+  <!-- Passive low-friction ball supports let the chassis turn without steering actuation. -->
   <link name="front_caster_link">
     <inertial>
       <origin xyz="0 0 0" rpy="0 0 0"/>
@@ -150,7 +151,7 @@
     <dynamics damping="0.01" friction="0.0"/>
   </joint>
 
-  <!-- laser_link is a preserved optical frame at the forward face of its housing. -->
+  <!-- laser_link is the ROS scan frame at the forward face of the housing. -->
   <link name="laser_link">
     <inertial>
       <origin xyz="-0.03 0 0" rpy="0 0 0"/>
@@ -161,7 +162,6 @@
       <origin xyz="-0.03 0 0" rpy="0 0 0"/>
       <geometry><box size="0.06 0.06 0.04"/></geometry>
       <material name="laser_housing_material"><color rgba="0.08 0.30 0.42 1"/></material>
-      <visibility_flags>0x00000001</visibility_flags>
     </visual>
     <collision name="laser_housing_collision">
       <origin xyz="-0.03 0 0" rpy="0 0 0"/>
@@ -203,12 +203,13 @@
   </joint>
 
   <link name="arm_link_1">
+    <!-- The link passes over the 0.72 m tabletop when docking. -->
     <inertial>
       <origin xyz="0.22 0 0" rpy="0 0 0"/>
       <mass value="1.35"/>
-      <xacro:box_inertia mass="1.35" x="0.34" y="0.10" z="0.10"/>
+      <xacro:box_inertia mass="1.35" x="0.34" y="0.10" z="0.040"/>
     </inertial>
-    <xacro:box_geometry name="upper_arm" x="0.34" y="0.10" z="0.10"
+    <xacro:box_geometry name="upper_arm" x="0.34" y="0.10" z="0.040"
                         xyz="0.22 0 0" rpy="0 0 0" rgba="0.72 0.45 0.12 1"/>
   </link>
 
@@ -222,12 +223,13 @@
   </joint>
 
   <link name="arm_link_2">
+    <!-- Keep the forearm clear of the non-adjacent wrist yoke in the folded pose. -->
     <inertial>
       <origin xyz="0.20 0 0" rpy="0 0 0"/>
       <mass value="1.10"/>
-      <xacro:box_inertia mass="1.10" x="0.32" y="0.085" z="0.085"/>
+      <xacro:box_inertia mass="1.10" x="0.32" y="0.055" z="0.055"/>
     </inertial>
-    <xacro:box_geometry name="forearm" x="0.32" y="0.085" z="0.085"
+    <xacro:box_geometry name="forearm" x="0.32" y="0.055" z="0.055"
                         xyz="0.20 0 0" rpy="0 0 0" rgba="0.72 0.45 0.12 1"/>
   </link>
 
@@ -263,9 +265,9 @@
     <inertial>
       <origin xyz="0.03 0 0" rpy="0 0 0"/>
       <mass value="0.26"/>
-      <xacro:box_inertia mass="0.26" x="0.06" y="0.070" z="0.070"/>
+      <xacro:box_inertia mass="0.26" x="0.06" y="0.05" z="0.05"/>
     </inertial>
-    <xacro:box_geometry name="wrist_yoke_2" x="0.06" y="0.070" z="0.070"
+    <xacro:box_geometry name="wrist_yoke_2" x="0.06" y="0.05" z="0.05"
                         xyz="0.03 0 0" rpy="0 0 0" rgba="0.38 0.40 0.44 1"/>
   </link>
 
@@ -302,9 +304,9 @@
     <inertial>
       <origin xyz="0.0275 0 0" rpy="0 0 0"/>
       <mass value="0.30"/>
-      <xacro:box_inertia mass="0.30" x="0.055" y="0.080" z="0.070"/>
+      <xacro:box_inertia mass="0.30" x="0.055" y="0.116" z="0.070"/>
     </inertial>
-    <xacro:box_geometry name="palm" x="0.055" y="0.080" z="0.070"
+    <xacro:box_geometry name="palm" x="0.055" y="0.116" z="0.070"
                         xyz="0.0275 0 0" rpy="0 0 0" rgba="0.25 0.27 0.30 1"/>
   </link>
 
@@ -379,8 +381,6 @@
       <visualize>false</visualize>
       <topic>/scan</topic>
       <ignition_frame_id>laser_link</ignition_frame_id>
-      <!-- The housing is flag 0x1; this mask omits it while retaining ordinary world visuals. -->
-      <visibility_mask>0xFFFFFFFE</visibility_mask>
       <ray>
         <scan>
           <horizontal>
@@ -407,9 +407,6 @@
 
   <gazebo>
     <self_collide>true</self_collide>
-    <plugin filename="ignition-gazebo-sensors-system" name="ignition::gazebo::systems::Sensors">
-      <render_engine>ogre2</render_engine>
-    </plugin>
     <plugin filename="ignition-gazebo-diff-drive-system" name="ignition::gazebo::systems::DiffDrive">
       <left_joint>left_wheel_joint</left_joint>
       <right_joint>right_wheel_joint</right_joint>
@@ -478,6 +475,14 @@
       <state_interface name="velocity"/>
     </joint>
     <joint name="right_wheel_joint">
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="front_caster_joint">
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="rear_caster_joint">
       <state_interface name="position"/>
       <state_interface name="velocity"/>
     </joint>

@@ -238,7 +238,7 @@
           <material><diffuse>0.18 0.16 0.14 1</diffuse></material>
         </visual>
 
-        <!-- Tray floor top is z = 0.735; 10 mm walls leave a 170 mm square interior. -->
+        <!-- Tray floor top is z = 0.735; 10 mm walls leave a 180 mm square interior. -->
         <collision name="tray_floor_collision">
           <pose>2.43 0.19 0.7275 0 0 0</pose>
           <geometry><box><size>0.2 0.2 0.015</size></box></geometry>
