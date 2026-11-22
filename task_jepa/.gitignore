@@ -7,7 +7,7 @@ __pycache__/
 # run outputs
 /models/
 /datasets/
-/outputs/
+# /outputs/
 
 # removed legacy documentation directory
 /docs/
