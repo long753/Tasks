@@ -20,6 +20,7 @@ from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
+# 路径定义
 SCRIPTS = Path(__file__).resolve().parent
 PROJECT = SCRIPTS.parent
 ASSET = PROJECT / "asset"
@@ -28,8 +29,8 @@ CONFIG = PROJECT / "config"
 
 def start_workcell(context):
     description = xacro.process_file(
-        str(ASSET / "robots" / "mobile_manipulator.urdf.xacro"),
-        mappings={"controllers_file": str(CONFIG / "controllers.yaml")},
+        str(object=ASSET / "mobile_manipulator.urdf.xacro"),
+        mappings={"controllers_file": str(object=CONFIG / "controllers.yaml")},
     ).toxml()
     mode = [] if LaunchConfiguration("gui").perform(context) == "true" else ["-s"]
     plugin_paths = [
@@ -48,7 +49,7 @@ def start_workcell(context):
             "-v",
             "3",
             *mode,
-            str(ASSET / "worlds" / "workcell.sdf"),
+            str(object=ASSET / "workcell.sdf"),
         ],
         name="workcell_simulator",
         output="screen",
@@ -91,7 +92,7 @@ def start_workcell(context):
             "-x",
             "-3.0",
             "-y",
-            "0.0",
+            "2.0",
             "-z",
             "0.101",
         ],
@@ -156,9 +157,9 @@ def start_workcell(context):
 
 def generate_launch_description():
     return LaunchDescription(
-        [
+        initial_entities=[
             DeclareLaunchArgument(
-                "gui", default_value="true", choices=["true", "false"]
+                name="gui", default_value="true", choices=["true", "false"]
             ),
             OpaqueFunction(function=start_workcell),
         ]

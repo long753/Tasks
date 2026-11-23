@@ -1,6 +1,5 @@
 """Map the workcell with simulated lidar and Gazebo ground truth."""
 
-from pathlib import Path
 import argparse
 import signal
 import subprocess
@@ -8,6 +7,7 @@ import sys
 from array import array
 from collections import deque
 from contextlib import ExitStack
+from pathlib import Path
 from tempfile import TemporaryDirectory
 from xml.etree import ElementTree
 
