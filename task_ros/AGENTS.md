@@ -13,6 +13,12 @@ source /opt/ros/humble/setup.bash
 ros2 launch scripts/workcell.launch.py
 ```
 
+### 2D 激光建图
+
+- 依赖 `ros-humble-slam-toolbox`（APT 同时安装 `ros-humble-nav2-map-server`）。保持仿真运行，在已加载 ROS 环境的另一终端执行 `python3 scripts/mapping.py`。
+- 建图脚本读取 `/scan`、`/clock` 和 `odom → base_link → laser_link`，不发送 `/cmd_vel`。在独立终端手动驾驶，完成后先停稳，再在建图终端按 `Ctrl+C`；等保存结束再关 Gazebo。
+- 成功后写入 `outputs/map/map.yaml` 和 `outputs/map/map.pgm`；后续导航读取 YAML。地图坐标属于 `map` 帧，不是 Gazebo 世界坐标，运动障碍可能在栅格上留下痕迹。
+
 ## 维护约定
 
 - `README.md` 由用户维护。不要修改本项目或上级仓库的 `README.md`；项目说明和面向代理的约定写在本文件。
