@@ -13,13 +13,12 @@ source /opt/ros/humble/setup.bash
 ros2 launch scripts/workcell.launch.py
 ```
 
-### 2D 激光建图
+### Gazebo 真值激光建图
 
-- 依赖 `ros-humble-slam-toolbox`（APT 同时安装 `ros-humble-nav2-map-server`）和 `ros-humble-rviz2`。保持 Gazebo 运行，在已加载 ROS 环境的另一终端执行 `python3 scripts/mapping.py`；RViz 会显示 `/map` 顶视图。无桌面时加 `--no-rviz`。
-- 建图脚本读取 `/scan`、`/clock` 和 `odom → base_link → laser_link`，不发送 `/cmd_vel`。在独立终端手动驾驶，完成后先停稳，再在建图终端按 `Ctrl+C`；等保存结束再关 Gazebo。只关 RViz 不会保存地图。
-- Humble 的 SLAM Toolbox 在扫描入口只检查平移距离，不检查航向变化。建图脚本关闭该平移门限，保留 0.5 秒的时间门限，让原地转向也能参与匹配。已经变形的旧地图需要重新采集。
-- 成功后写入 `outputs/map/map.png` 和 `outputs/map/map.yaml`；后续导航加载 YAML，两文件需放在同一目录。地图坐标属于 `map` 帧，不是 Gazebo 世界坐标，运动障碍可能在栅格上留下痕迹。
-- `mapping.py` 提供建图时的 `map → odom`，不负责用已保存地图重定位；后续做定位时，避免和建图节点同时发布这条 TF。
+- 使用系统 `python3-numpy`、`python3-pil` 和 `ros-humble-rviz2`。用 `scripts/main.launch.py` 启动仿真，在已加载 ROS 环境的另一终端执行 `python3 scripts/mapping.py`；RViz 会显示 `/map` 顶视图。无桌面时加 `--no-rviz`。
+- 建图脚本按仿真时间对齐 `/scan` 和 `/ground_truth/odom`，用 `base_link → laser_link` 安装变换投影激光。它不做扫描匹配，不使用轮式 `/odom`，也不发送 `/cmd_vel`。在独立终端驾驶；雷达没扫到的区域保留为未知，移动障碍可能留下痕迹。
+- 建图完成后先停稳，在建图终端按 `Ctrl+C` 保存 `outputs/map/map.png` 和 `outputs/map/map.yaml`，等保存结束再关 Gazebo。只关 RViz 不会保存。
+- 栅格分辨率为 0.05 m，`map` 的 XY 与 Gazebo `world` 对齐，覆盖场地地板和边墙。后续导航加载 YAML（PNG 与 YAML 同目录）；建图脚本不发布 `map → odom`，也不承担导航定位。
 
 ## 维护约定
 
