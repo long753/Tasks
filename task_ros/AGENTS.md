@@ -17,7 +17,9 @@ ros2 launch scripts/workcell.launch.py
 
 - 依赖 `ros-humble-slam-toolbox`（APT 同时安装 `ros-humble-nav2-map-server`）和 `ros-humble-rviz2`。保持 Gazebo 运行，在已加载 ROS 环境的另一终端执行 `python3 scripts/mapping.py`；RViz 会显示 `/map` 顶视图。无桌面时加 `--no-rviz`。
 - 建图脚本读取 `/scan`、`/clock` 和 `odom → base_link → laser_link`，不发送 `/cmd_vel`。在独立终端手动驾驶，完成后先停稳，再在建图终端按 `Ctrl+C`；等保存结束再关 Gazebo。只关 RViz 不会保存地图。
+- Humble 的 SLAM Toolbox 在扫描入口只检查平移距离，不检查航向变化。建图脚本关闭该平移门限，保留 0.5 秒的时间门限，让原地转向也能参与匹配。已经变形的旧地图需要重新采集。
 - 成功后写入 `outputs/map/map.png` 和 `outputs/map/map.yaml`；后续导航加载 YAML，两文件需放在同一目录。地图坐标属于 `map` 帧，不是 Gazebo 世界坐标，运动障碍可能在栅格上留下痕迹。
+- `mapping.py` 提供建图时的 `map → odom`，不负责用已保存地图重定位；后续做定位时，避免和建图节点同时发布这条 TF。
 
 ## 维护约定
 

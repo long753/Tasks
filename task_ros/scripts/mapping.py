@@ -95,14 +95,23 @@ def main() -> int:
     params = toolbox / "share/slam_toolbox/config/mapper_params_online_async.yaml"
     command = [
         toolbox / "lib/slam_toolbox/async_slam_toolbox_node",
-        "--ros-args", "--params-file", params,
-        "-p", "use_sim_time:=true",
-        "-p", "base_frame:=base_link",
-        "-p", "max_laser_range:=12.0",
-        "-p", "map_update_interval:=1.0",
-        "-p", "minimum_travel_distance:=0.20",
-        "-p", "minimum_travel_heading:=0.20",
-        "-p", "use_map_saver:=false",
+        "--ros-args",
+        "--params-file",
+        params,
+        "-p",
+        "use_sim_time:=true",
+        "-p",
+        "base_frame:=base_link",
+        "-p",
+        "max_laser_range:=12.0",
+        "-p",
+        "map_update_interval:=1.0",
+        # Humble's scan gate checks translation but not yaw. Keep the upstream
+        # 0.5 s time gate, and let scans from in-place turns reach the matcher.
+        "-p",
+        "minimum_travel_distance:=0.0",
+        "-p",
+        "use_map_saver:=false",
     ]
     stopping = False
 
