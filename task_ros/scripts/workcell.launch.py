@@ -3,7 +3,6 @@
 import os
 import sys
 from pathlib import Path
-from shlex import quote
 
 import xacro
 from ament_index_python.packages import get_package_prefix
@@ -28,10 +27,6 @@ CONFIG = PROJECT / "config"
 
 
 def start_workcell(context):
-    if Path(sys.prefix).resolve() != (PROJECT / ".venv").resolve():
-        raise RuntimeError(
-            "Use bash scripts/ros_uv.sh ros2 launch scripts/workcell.launch.py"
-        )
     description = xacro.process_file(
         str(ASSET / "robots" / "mobile_manipulator.urdf.xacro"),
         mappings={"controllers_file": str(CONFIG / "controllers.yaml")},
@@ -104,7 +99,6 @@ def start_workcell(context):
     controllers = Node(
         package="controller_manager",
         executable="spawner",
-        prefix=[quote(sys.executable)],
         output="screen",
         arguments=[
             "joint_state_broadcaster",
