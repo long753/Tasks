@@ -1,13 +1,16 @@
 """Build a 2D map with SLAM Toolbox and save it on Ctrl+C."""
 
 from pathlib import Path
+import argparse
 import signal
 import subprocess
 import sys
+from contextlib import ExitStack
 from tempfile import TemporaryDirectory
 
 
-OUTPUT = Path(__file__).resolve().parents[1] / "outputs" / "map"
+ROOT = Path(__file__).resolve().parents[1]
+OUTPUT = ROOT / "outputs" / "map"
 
 
 def save_map(saver: Path) -> None:
@@ -17,21 +20,46 @@ def save_map(saver: Path) -> None:
         prefix = Path(temp_dir) / "map"
         result = subprocess.run(
             [
-                saver, "-t", "/map", "-f", prefix, "--fmt", "pgm",
-                "--ros-args", "-p", "map_subscribe_transient_local:=true",
-                "-p", "save_map_timeout:=8.0",
+                saver,
+                "-t",
+                "/map",
+                "-f",
+                prefix,
+                "--fmt",
+                "png",
+                # Nav2 writes unknown cells as gray 205 (occupancy ~0.196 on reload).
+                "--free",
+                "0.19",
+                "--ros-args",
+                "-p",
+                "map_subscribe_transient_local:=true",
+                "-p",
+                "save_map_timeout:=8.0",
             ],
             start_new_session=True,
             timeout=15,
         )
-        files = [prefix.with_suffix(".pgm"), prefix.with_suffix(".yaml")]
+        files = [prefix.with_suffix(".png"), prefix.with_suffix(".yaml")]
         if result.returncode or not all(f.is_file() and f.stat().st_size for f in files):
             raise RuntimeError("没有保存到有效地图。请保持仿真运行，检查 /scan 和 odom → base_link → laser_link。")
         for file in files:
             file.replace(OUTPUT / file.name)
 
 
+def _stop_process(process: subprocess.Popen) -> None:
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+
+
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--no-rviz", action="store_true", help="Run without the live map window.")
+    args = parser.parse_args()
+
     try:
         from ament_index_python.packages import PackageNotFoundError, get_package_prefix
     except ImportError:
@@ -44,6 +72,25 @@ def main() -> int:
     except PackageNotFoundError as error:
         print(f"{error}\n请执行 sudo apt install ros-humble-slam-toolbox，然后重新加载 ROS 环境。", file=sys.stderr)
         return 1
+
+    viewer = None
+    if not args.no_rviz:
+        try:
+            rviz = Path(get_package_prefix("rviz2"))
+        except PackageNotFoundError:
+            print(
+                "请安装 ros-humble-rviz2 以显示地图，或用 --no-rviz 仅建图。",
+                file=sys.stderr,
+            )
+            return 1
+        viewer = [
+            rviz / "lib/rviz2/rviz2",
+            "-d",
+            ROOT / "config" / "mapping.rviz",
+            "--ros-args",
+            "-p",
+            "use_sim_time:=true",
+        ]
 
     params = toolbox / "share/slam_toolbox/config/mapper_params_online_async.yaml"
     command = [
@@ -67,9 +114,13 @@ def main() -> int:
     signal.signal(signal.SIGTERM, request_stop)
 
     try:
-        # Keep SLAM alive after the terminal sends Ctrl+C to this script.
-        slam = subprocess.Popen(command, start_new_session=True)
-        try:
+        with ExitStack() as processes:
+            # Keep SLAM alive until the save completes, even after terminal Ctrl+C.
+            slam = subprocess.Popen(command, start_new_session=True)
+            processes.callback(_stop_process, slam)
+            if viewer is not None:
+                rviz_process = subprocess.Popen(viewer, start_new_session=True)
+                processes.callback(_stop_process, rviz_process)
             print("SLAM 已启动：请在另一终端控制底盘。完成后在这里按 Ctrl+C 保存。", flush=True)
             while not stopping:
                 try:
@@ -80,14 +131,7 @@ def main() -> int:
 
             print("正在保存 /map，请不要关闭仿真……", flush=True)
             save_map(nav2 / "lib/nav2_map_server/map_saver_cli")
-            print(f"地图已保存：{OUTPUT / 'map.yaml'} 和 map.pgm", flush=True)
-        finally:
-            slam.terminate()
-            try:
-                slam.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                slam.kill()
-                slam.wait()
+            print(f"地图已保存：{OUTPUT / 'map.yaml'} 和 map.png", flush=True)
     except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
         print(f"建图失败：{error}", file=sys.stderr)
         return 1

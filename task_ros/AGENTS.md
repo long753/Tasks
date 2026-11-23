@@ -15,9 +15,9 @@ ros2 launch scripts/workcell.launch.py
 
 ### 2D 激光建图
 
-- 依赖 `ros-humble-slam-toolbox`（APT 同时安装 `ros-humble-nav2-map-server`）。保持仿真运行，在已加载 ROS 环境的另一终端执行 `python3 scripts/mapping.py`。
-- 建图脚本读取 `/scan`、`/clock` 和 `odom → base_link → laser_link`，不发送 `/cmd_vel`。在独立终端手动驾驶，完成后先停稳，再在建图终端按 `Ctrl+C`；等保存结束再关 Gazebo。
-- 成功后写入 `outputs/map/map.yaml` 和 `outputs/map/map.pgm`；后续导航读取 YAML。地图坐标属于 `map` 帧，不是 Gazebo 世界坐标，运动障碍可能在栅格上留下痕迹。
+- 依赖 `ros-humble-slam-toolbox`（APT 同时安装 `ros-humble-nav2-map-server`）和 `ros-humble-rviz2`。保持 Gazebo 运行，在已加载 ROS 环境的另一终端执行 `python3 scripts/mapping.py`；RViz 会显示 `/map` 顶视图。无桌面时加 `--no-rviz`。
+- 建图脚本读取 `/scan`、`/clock` 和 `odom → base_link → laser_link`，不发送 `/cmd_vel`。在独立终端手动驾驶，完成后先停稳，再在建图终端按 `Ctrl+C`；等保存结束再关 Gazebo。只关 RViz 不会保存地图。
+- 成功后写入 `outputs/map/map.png` 和 `outputs/map/map.yaml`；后续导航加载 YAML，两文件需放在同一目录。地图坐标属于 `map` 帧，不是 Gazebo 世界坐标，运动障碍可能在栅格上留下痕迹。
 
 ## 维护约定
 
