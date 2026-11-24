@@ -5,26 +5,25 @@
 
 使用 Ubuntu 22.04 的系统 Python（`/usr/bin/python3`），依赖通过 APT 安装的 ROS 2 Humble 和 Gazebo Fortress。
 
-
-## 有地图
 ### 构建地图
 启动主仿真(Terminal 1)：
 ```bash
 ros2 launch scripts/main.launch.py
 ```
 
-启动slam(Terminal 2)：
+启动 slam(Terminal 2)：
 ```bash
-python3 scripts/mapping.py
+ros2 launch scripts/mapping.launch.py
 ```
 
-移动机器人手动建图(Terminal 3)：
+移动机器人(Terminal 3)：
 ```bash
 ros2 run teleop_twist_keyboard teleop_twist_keyboard
 ```
-
 当地图构建完成后在 Terminal 2 中输入 `ctrl+c` 将地图保存到 outputs/mapping 里面
 
+
+## 有地图
 ### 启动主程序
 ```bash
 ros2 launch scripts/main_with_map.launch.py
@@ -49,3 +48,14 @@ ros2 launch scripts/main_without_map.launch.py
 5. 使用标准 IK 计算机械臂的关节角变化
 
 **路径规划算法对比实验：**
+- 有地图，无动态障碍物：
+- 有地图，有动态障碍物：
+- 无地图，无动态障碍物：
+- 无地图，有动态障碍物：
+
+定位算法：`AMCL`, `SLAM`
+全局规划算法：`A*`
+局部避障算法：`DWA`, 
+
+## 图像说明
+`/outputs/images/1.png`: 由于轮胎打滑导致的 AMCL 定位偏差

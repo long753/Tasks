@@ -1,0 +1,130 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Map
+      Name: Map
+      Enabled: true
+      Alpha: 1
+      Color Scheme: map
+      Draw Behind: true
+      Topic:
+        Value: /map
+        History Policy: Keep Last
+        Depth: 1
+        Reliability Policy: Reliable
+        Durability Policy: Transient Local
+    - Class: rviz_default_plugins/Map
+      Name: Global Costmap
+      Enabled: true
+      Alpha: 0.7
+      Color Scheme: costmap
+      Draw Behind: false
+      Topic:
+        Value: /global_costmap/costmap
+        History Policy: Keep Last
+        Depth: 1
+        Reliability Policy: Reliable
+        Durability Policy: Transient Local
+    - Class: rviz_default_plugins/LaserScan
+      Name: Laser Scan
+      Enabled: true
+      Color Transformer: FlatColor
+      Color: 255; 60; 60
+      Position Transformer: XYZ
+      Style: Points
+      Size (Pixels): 3
+      Topic:
+        Value: /scan
+        History Policy: Keep Last
+        Depth: 5
+        Reliability Policy: Best Effort
+        Durability Policy: Volatile
+    - Class: rviz_default_plugins/PoseWithCovariance
+      Name: AMCL Pose
+      Enabled: true
+      Shape: Arrow
+      Color: 30; 180; 30
+      Covariance:
+        Value: true
+        Position:
+          Value: true
+          Alpha: 0.25
+          Scale: 1
+        Orientation:
+          Value: true
+          Alpha: 0.25
+          Scale: 1
+      Topic:
+        Value: /amcl_pose
+        History Policy: Keep Last
+        Depth: 1
+        Reliability Policy: Reliable
+        Durability Policy: Transient Local
+    - Class: rviz_default_plugins/Path
+      Name: Docking Global Plan
+      Enabled: true
+      Alpha: 1
+      Buffer Length: 1
+      Color: 255; 215; 0
+      Line Style: Lines
+      Line Width: 0.05
+      Topic:
+        Value: /global_plan
+        History Policy: Keep Last
+        Depth: 1
+        Reliability Policy: Reliable
+        Durability Policy: Transient Local
+    - Class: rviz_default_plugins/Pose
+      Name: Docking Goal
+      Enabled: true
+      Alpha: 1
+      Color: 30; 144; 255
+      Shape: Arrow
+      Topic:
+        Value: /goal_pose
+        History Policy: Keep Last
+        Depth: 1
+        Reliability Policy: Reliable
+        Durability Policy: Transient Local
+    - Class: rviz_default_plugins/Polygon
+      Name: Conservative Robot Footprint
+      Enabled: true
+      Alpha: 0.7
+      Color: 30; 180; 30
+      Topic:
+        Value: /global_costmap/published_footprint
+        History Policy: Keep Last
+        Depth: 1
+        Reliability Policy: Reliable
+        Durability Policy: Volatile
+    - Class: rviz_default_plugins/Axes
+      Name: Robot Axes
+      Enabled: true
+      Reference Frame: base_link
+      Length: 0.4
+      Radius: 0.02
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: map
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/SetInitialPose
+      Name: 2D Pose Estimate (Recovery)
+      Topic: /initialpose
+      X std deviation: 0.5
+      Y std deviation: 0.5
+      Theta std deviation: 0.261799
+  Views:
+    Current:
+      Class: rviz_default_plugins/TopDownOrtho
+      Name: TopDownOrtho
+      Angle: 0
+      Scale: 65
+      X: 0
+      Y: 0
+Window Geometry:
+  Width: 1280
+  Height: 900

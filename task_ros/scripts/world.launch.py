@@ -3,6 +3,7 @@
 import os
 import sys
 from pathlib import Path
+from xml.etree import ElementTree
 
 import xacro
 from ament_index_python.packages import get_package_prefix
@@ -11,16 +12,17 @@ from launch.actions import (
     DeclareLaunchArgument,
     EmitEvent,
     ExecuteProcess,
+    GroupAction,
     OpaqueFunction,
     RegisterEventHandler,
 )
+from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
 from launch.events import Shutdown
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
-# 路径定义
 SCRIPTS = Path(__file__).resolve().parent
 PROJECT = SCRIPTS.parent
 ASSET = PROJECT / "asset"
@@ -28,9 +30,15 @@ CONFIG = PROJECT / "config"
 
 
 def start_workcell(context):
+    # 场景起点同时作为机器人出生位置和 AMCL 的初始估计。
+    world = ElementTree.parse(ASSET / "workcell.sdf")
+    start_pose = tuple(
+        map(float, world.findtext("./world/model[@name='start_marker']/pose").split())
+    )
+    # 1. 展开机器人描述，并补充 Gazebo 的插件与资源搜索路径。
     description = xacro.process_file(
-        str(object=ASSET / "mobile_manipulator.urdf.xacro"),
-        mappings={"controllers_file": str(object=CONFIG / "controllers.yaml")},
+        str(ASSET / "mobile_manipulator.urdf.xacro"),
+        mappings={"controllers_file": str(CONFIG / "controllers.yaml")},
     ).toxml()
     mode = [] if LaunchConfiguration("gui").perform(context) == "true" else ["-s"]
     plugin_paths = [
@@ -41,6 +49,7 @@ def start_workcell(context):
         str(Path(get_package_prefix("franka_description")) / "share"),
         os.environ.get("IGN_GAZEBO_RESOURCE_PATH", ""),
     ]
+    # 2. 启动仿真、机器人状态发布和基础话题桥接。
     simulator = ExecuteProcess(
         cmd=[
             "ign",
@@ -49,7 +58,7 @@ def start_workcell(context):
             "-v",
             "3",
             *mode,
-            str(object=ASSET / "workcell.sdf"),
+            str(ASSET / "workcell.sdf"),
         ],
         name="workcell_simulator",
         output="screen",
@@ -78,6 +87,7 @@ def start_workcell(context):
         parameters=[{"config_file": str(CONFIG / "bridge.yaml")}],
         output="screen",
     )
+    # 3. 生成机器人；成功后再加载控制器，不能用固定延时替代此依赖。
     spawn_robot = Node(
         package="ros_gz_sim",
         executable="create",
@@ -90,11 +100,13 @@ def start_workcell(context):
             "-name",
             "mobile_manipulator",
             "-x",
-            "-3.0",
+            str(start_pose[0]),
             "-y",
-            "2.0",
+            str(start_pose[1]),
             "-z",
             "0.101",
+            "-Y",
+            str(start_pose[5]),
         ],
     )
     controllers = Node(
@@ -111,10 +123,37 @@ def start_workcell(context):
             "45",
         ],
     )
-    obstacle = ExecuteProcess(
-        cmd=[sys.executable, str(SCRIPTS / "moving_obstacle.py")],
-        name="moving_obstacle_driver",
-        output="screen",
+    # 4. 一个开关同时控制移动障碍模型、话题桥接和运动驱动。
+    obstacle = GroupAction(
+        condition=IfCondition(LaunchConfiguration("moving_obstacle")),
+        actions=[
+            Node(
+                package="ros_gz_sim",
+                executable="create",
+                name="spawn_moving_obstacle",
+                arguments=[
+                    "-world", "workcell",
+                    "-file", str(ASSET / "moving_obstacle.sdf"),
+                    "-name", "moving_obstacle",
+                    "-z", "0.3",
+                ],
+                output="screen",
+            ),
+            Node(
+                package="ros_gz_bridge",
+                executable="parameter_bridge",
+                name="moving_obstacle_bridge",
+                parameters=[
+                    {"config_file": str(CONFIG / "moving_obstacle_bridge.yaml")}
+                ],
+                output="screen",
+            ),
+            ExecuteProcess(
+                cmd=[sys.executable, str(SCRIPTS / "moving_obstacle.py")],
+                name="moving_obstacle_driver",
+                output="screen",
+            ),
+        ],
     )
 
     def after_spawn(event, _context):
@@ -160,6 +199,10 @@ def generate_launch_description():
         initial_entities=[
             DeclareLaunchArgument(
                 name="gui", default_value="true", choices=["true", "false"]
+            ),
+            DeclareLaunchArgument(
+                name="moving_obstacle", default_value="false", choices=["true", "false"],
+                description="同时启用移动障碍模型、桥接和驱动",
             ),
             OpaqueFunction(function=start_workcell),
         ]

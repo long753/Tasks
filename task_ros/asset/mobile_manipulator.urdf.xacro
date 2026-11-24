@@ -2,6 +2,7 @@
 <robot name="mobile_manipulator" xmlns:xacro="http://www.ros.org/wiki/xacro">
   <xacro:arg name="controllers_file" default=""/>
 
+  <!-- 1. Franka 描述与仿真惯量修正；保留原始关节和安装接口。 -->
   <xacro:include filename="$(find franka_description)/robots/common/franka_arm.xacro"/>
   <xacro:include filename="$(find franka_description)/end_effectors/common/franka_hand.xacro"/>
   <xacro:include filename="$(find franka_description)/end_effectors/common/utils.xacro"/>
@@ -16,6 +17,7 @@
   <xacro:property name="fer_sim_inertials" value="${xacro.dotify(dict(fer_inertials,
       link4=dict(fer_inertials.link4, inertia=link4_sim_inertia)))}"/>
 
+  <!-- 2. 几何、惯量与控制接口宏。 -->
   <!-- Principal inertias are about the local shape axes at each link COM. -->
   <xacro:macro name="box_inertia" params="mass x y z">
     <inertia ixx="${mass * (y * y + z * z) / 12.0}"
@@ -88,6 +90,7 @@
     </joint>
   </xacro:macro>
 
+  <!-- 3. 差速底盘、驱动轮与被动支撑。 -->
   <!-- base_link is the drive axle midpoint, 0.101 m above the nominal ground. -->
   <link name="base_link">
     <inertial>
@@ -170,6 +173,7 @@
     <dynamics damping="0.01" friction="0.0"/>
   </joint>
 
+  <!-- 4. 激光雷达及其安装变换。 -->
   <!-- laser_link is the ROS scan frame at the forward face of the housing. -->
   <link name="laser_link">
     <inertial>
@@ -194,6 +198,7 @@
     <origin xyz="0.36 0 0.199" rpy="0 0 0"/>
   </joint>
 
+  <!-- 5. 机械臂支座、Panda 与双指夹爪。 -->
   <!-- The pedestal starts at the chassis top. Its upper face mounts Panda link 0. -->
   <link name="arm_mount_link">
     <inertial>
@@ -225,6 +230,7 @@
                     ee_inertials="${xacro.load_yaml('$(find franka_description)/end_effectors/franka_hand/inertials.yaml')}"
                     rpy_ee="0 0 ${-pi/4}"/>
 
+  <!-- 6. Gazebo 接触参数、传感器和运动插件。 -->
   <gazebo reference="front_caster_link">
     <mu1>0.05</mu1>
     <mu2>0.05</mu2>
@@ -300,6 +306,7 @@
     </plugin>
   </gazebo>
 
+  <!-- 7. ros2_control：机械臂位置、夹爪力控和底盘只读状态。 -->
   <ros2_control name="GazeboSimSystem" type="system">
     <hardware>
       <plugin>gz_ros2_control/GazeboSimSystem</plugin>

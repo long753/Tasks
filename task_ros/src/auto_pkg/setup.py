@@ -14,7 +14,7 @@ setup(
     zip_safe=True,
     maintainer="long753",
     maintainer_email="cl2848077709@outlook.com",
-    description="TODO: Package description",
+    description="ROS 2 mobile manipulation exercises",
     license="Apache-2.0",
     extras_require={
         "test": [
@@ -23,8 +23,7 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "navigation = workcell_task.navigation_node:main",
-            "manipulation = workcell_task.manipulation_node:main",
+            "navigation = auto_pkg.navigation_node:main",
         ],
     },
 )

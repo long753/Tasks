@@ -3,7 +3,7 @@
 <package format="3">
   <name>auto_pkg</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <description>ROS 2 mobile manipulation exercises</description>
   <maintainer email="cl2848077709@outlook.com">long753</maintainer>
   <license>Apache-2.0</license>
 
