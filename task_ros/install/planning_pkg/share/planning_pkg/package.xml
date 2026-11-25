@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>planning_pkg</name>
+  <version>0.0.0</version>
+  <description>Future high-level task planning</description>
+  <maintainer email="cl2848077709@outlook.com">long753</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>ament_python</buildtool_depend>
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

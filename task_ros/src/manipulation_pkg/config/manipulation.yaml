@@ -1,0 +1,17 @@
+pick_place_node:
+  ros__parameters:
+    use_sim_time: true
+    target_model: 'target_block'
+    base_link: 'base_link'
+    tool_link: 'fer_hand_tcp'
+    # 米：上方接近距离、提升距离、TCP 相对物块中心的抓取高度。
+    approach_height: 0.12
+    lift_height: 0.15
+    grasp_offset: 0.012
+    # 弧度：倾斜抓取，扩大末端在高位转移时的可达空间。
+    grasp_pitch: -0.35
+    # 七轴限速为 rad/s；双指张开力、夹紧力为 N；期限为仿真秒。
+    joint_speed: 0.35
+    open_effort: 1.5
+    grip_effort: 2.0
+    gripper_timeout: 5.0

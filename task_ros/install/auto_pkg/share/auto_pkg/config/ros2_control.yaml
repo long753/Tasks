@@ -1,0 +1,38 @@
+controller_manager:
+  ros__parameters:
+    use_sim_time: true
+    update_rate: 250
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+    arm_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+    gripper_controller:
+      type: forward_command_controller/ForwardCommandController
+
+arm_controller:
+  ros__parameters:
+    joints:
+      - fer_joint1
+      - fer_joint2
+      - fer_joint3
+      - fer_joint4
+      - fer_joint5
+      - fer_joint6
+      - fer_joint7
+    command_interfaces: [position]
+    state_interfaces: [position, velocity]
+    constraints:
+      goal_time: 1.0
+      stopped_velocity_tolerance: 0.05
+      fer_joint1: {goal: 0.015}
+      fer_joint2: {goal: 0.015}
+      fer_joint3: {goal: 0.015}
+      fer_joint4: {goal: 0.015}
+      fer_joint5: {goal: 0.015}
+      fer_joint6: {goal: 0.015}
+      fer_joint7: {goal: 0.015}
+
+gripper_controller:
+  ros__parameters:
+    joints: [fer_finger_joint1, fer_finger_joint2]
+    interface_name: effort

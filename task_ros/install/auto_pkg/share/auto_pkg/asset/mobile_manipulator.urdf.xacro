@@ -1,0 +1,343 @@
+<?xml version="1.0"?>
+<robot name="mobile_manipulator" xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:arg name="controllers_file" default=""/>
+
+  <!-- 1. Franka 描述与仿真惯量修正；保留原始关节和安装接口。 -->
+  <xacro:include filename="$(find franka_description)/robots/common/franka_arm.xacro"/>
+  <xacro:include filename="$(find franka_description)/end_effectors/common/franka_hand.xacro"/>
+  <xacro:include filename="$(find franka_description)/end_effectors/common/utils.xacro"/>
+  <!-- Franka's package uses FER for the original Panda. -->
+  <xacro:property name="fer_config" value="$(find franka_description)/robots/fer"/>
+  <xacro:property name="fer_inertials" value="${xacro.load_yaml(fer_config + '/inertials.yaml')}"/>
+  <!-- FER 1.0.1 link4 violates the principal-moment triangle inequality in SDFormat.
+       Add 0.0012 kg·m² to each diagonal, preserving its COM and principal axes. -->
+  <xacro:property name="link4_inertia" value="${fer_inertials.link4.inertia}"/>
+  <xacro:property name="link4_sim_inertia" value="${dict(link4_inertia,
+      xx=link4_inertia.xx + 0.0012, yy=link4_inertia.yy + 0.0012, zz=link4_inertia.zz + 0.0012)}"/>
+  <xacro:property name="fer_sim_inertials" value="${xacro.dotify(dict(fer_inertials,
+      link4=dict(fer_inertials.link4, inertia=link4_sim_inertia)))}"/>
+
+  <!-- 2. 几何、惯量与控制接口宏。 -->
+  <!-- Principal inertias are about the local shape axes at each link COM. -->
+  <xacro:macro name="box_inertia" params="mass x y z">
+    <inertia ixx="${mass * (y * y + z * z) / 12.0}"
+             ixy="0" ixz="0"
+             iyy="${mass * (x * x + z * z) / 12.0}"
+             iyz="0"
+             izz="${mass * (x * x + y * y) / 12.0}"/>
+  </xacro:macro>
+
+  <!-- Cylinder principal axis is local +Z; rotate the inertial frame with the geometry when needed. -->
+  <xacro:macro name="cylinder_inertia" params="mass radius length">
+    <inertia ixx="${mass * (3.0 * radius * radius + length * length) / 12.0}"
+             ixy="0" ixz="0"
+             iyy="${mass * (3.0 * radius * radius + length * length) / 12.0}"
+             iyz="0"
+             izz="${mass * radius * radius / 2.0}"/>
+  </xacro:macro>
+
+  <xacro:macro name="sphere_inertia" params="mass radius">
+    <inertia ixx="${2.0 * mass * radius * radius / 5.0}"
+             ixy="0" ixz="0"
+             iyy="${2.0 * mass * radius * radius / 5.0}"
+             iyz="0"
+             izz="${2.0 * mass * radius * radius / 5.0}"/>
+  </xacro:macro>
+
+  <!-- Visuals and collisions deliberately share the same primitive and pose. -->
+  <!-- Let libsdformat name collisions from their links so it retains the Gazebo friction extensions. -->
+  <xacro:macro name="box_geometry" params="name x y z xyz rpy rgba">
+    <visual name="${name}_visual">
+      <origin xyz="${xyz}" rpy="${rpy}"/>
+      <geometry><box size="${x} ${y} ${z}"/></geometry>
+      <material name="${name}_material"><color rgba="${rgba}"/></material>
+    </visual>
+    <collision>
+      <origin xyz="${xyz}" rpy="${rpy}"/>
+      <geometry><box size="${x} ${y} ${z}"/></geometry>
+    </collision>
+  </xacro:macro>
+
+  <xacro:macro name="cylinder_geometry" params="name radius length xyz rpy rgba">
+    <visual name="${name}_visual">
+      <origin xyz="${xyz}" rpy="${rpy}"/>
+      <geometry><cylinder radius="${radius}" length="${length}"/></geometry>
+      <material name="${name}_material"><color rgba="${rgba}"/></material>
+    </visual>
+    <collision>
+      <origin xyz="${xyz}" rpy="${rpy}"/>
+      <geometry><cylinder radius="${radius}" length="${length}"/></geometry>
+    </collision>
+  </xacro:macro>
+
+  <xacro:macro name="sphere_geometry" params="name radius xyz rgba">
+    <visual name="${name}_visual">
+      <origin xyz="${xyz}" rpy="0 0 0"/>
+      <geometry><sphere radius="${radius}"/></geometry>
+      <material name="${name}_material"><color rgba="${rgba}"/></material>
+    </visual>
+    <collision>
+      <origin xyz="${xyz}" rpy="0 0 0"/>
+      <geometry><sphere radius="${radius}"/></geometry>
+    </collision>
+  </xacro:macro>
+
+  <xacro:macro name="controlled_joint" params="name interface initial">
+    <joint name="${name}">
+      <command_interface name="${interface}"/>
+      <state_interface name="position"><param name="initial_value">${initial}</param></state_interface>
+      <state_interface name="velocity"/>
+    </joint>
+  </xacro:macro>
+
+  <!-- 3. 差速底盘、驱动轮与被动支撑。 -->
+  <!-- base_link is the drive axle midpoint, 0.101 m above the nominal ground. -->
+  <link name="base_link">
+    <inertial>
+      <origin xyz="0 0 0.10" rpy="0 0 0"/>
+      <mass value="18.0"/>
+      <xacro:box_inertia mass="18.0" x="0.58" y="0.39" z="0.16"/>
+    </inertial>
+    <xacro:box_geometry name="chassis" x="0.58" y="0.39" z="0.16"
+                        xyz="0 0 0.10" rpy="0 0 0" rgba="0.16 0.18 0.22 1"/>
+  </link>
+
+  <link name="left_wheel_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="1.5707963267948966 0 0"/>
+      <mass value="1.20"/>
+      <xacro:cylinder_inertia mass="1.20" radius="0.10" length="0.05"/>
+    </inertial>
+    <xacro:cylinder_geometry name="left_wheel" radius="0.10" length="0.05"
+                             xyz="0 0 0" rpy="1.5707963267948966 0 0" rgba="0.05 0.05 0.05 1"/>
+  </link>
+
+  <joint name="left_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="left_wheel_link"/>
+    <origin xyz="0 0.23 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <dynamics damping="0.02" friction="0.0"/>
+  </joint>
+
+  <link name="right_wheel_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="1.5707963267948966 0 0"/>
+      <mass value="1.20"/>
+      <xacro:cylinder_inertia mass="1.20" radius="0.10" length="0.05"/>
+    </inertial>
+    <xacro:cylinder_geometry name="right_wheel" radius="0.10" length="0.05"
+                             xyz="0 0 0" rpy="1.5707963267948966 0 0" rgba="0.05 0.05 0.05 1"/>
+  </link>
+
+  <joint name="right_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="right_wheel_link"/>
+    <origin xyz="0 -0.23 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <dynamics damping="0.02" friction="0.0"/>
+  </joint>
+
+  <!-- Passive low-friction ball supports let the chassis turn without steering actuation. -->
+  <link name="front_caster_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.12"/>
+      <xacro:sphere_inertia mass="0.12" radius="0.04"/>
+    </inertial>
+    <xacro:sphere_geometry name="front_caster" radius="0.04" xyz="0 0 0" rgba="0.10 0.10 0.12 1"/>
+  </link>
+
+  <joint name="front_caster_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="front_caster_link"/>
+    <origin xyz="0.25 0 -0.06" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <dynamics damping="0.01" friction="0.0"/>
+  </joint>
+
+  <link name="rear_caster_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.12"/>
+      <xacro:sphere_inertia mass="0.12" radius="0.04"/>
+    </inertial>
+    <xacro:sphere_geometry name="rear_caster" radius="0.04" xyz="0 0 0" rgba="0.10 0.10 0.12 1"/>
+  </link>
+
+  <joint name="rear_caster_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="rear_caster_link"/>
+    <origin xyz="-0.25 0 -0.06" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <dynamics damping="0.01" friction="0.0"/>
+  </joint>
+
+  <!-- 4. 激光雷达及其安装变换。 -->
+  <!-- laser_link is the ROS scan frame at the forward face of the housing. -->
+  <link name="laser_link">
+    <inertial>
+      <origin xyz="-0.03 0 0" rpy="0 0 0"/>
+      <mass value="0.18"/>
+      <xacro:box_inertia mass="0.18" x="0.06" y="0.06" z="0.04"/>
+    </inertial>
+    <visual name="laser_housing_visual">
+      <origin xyz="-0.03 0 0" rpy="0 0 0"/>
+      <geometry><box size="0.06 0.06 0.04"/></geometry>
+      <material name="laser_housing_material"><color rgba="0.08 0.30 0.42 1"/></material>
+    </visual>
+    <collision name="laser_housing_collision">
+      <origin xyz="-0.03 0 0" rpy="0 0 0"/>
+      <geometry><box size="0.06 0.06 0.04"/></geometry>
+    </collision>
+  </link>
+
+  <joint name="laser_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="laser_link"/>
+    <origin xyz="0.36 0 0.199" rpy="0 0 0"/>
+  </joint>
+
+  <!-- 5. 机械臂支座、Panda 与双指夹爪。 -->
+  <!-- The pedestal starts at the chassis top. Its upper face mounts Panda link 0. -->
+  <link name="arm_mount_link">
+    <inertial>
+      <origin xyz="0.05 0 0.06" rpy="0 0 0"/>
+      <mass value="2.0"/>
+      <xacro:box_inertia mass="2.0" x="0.25" y="0.22" z="0.12"/>
+    </inertial>
+    <xacro:box_geometry name="arm_pedestal" x="0.25" y="0.22" z="0.12"
+                        xyz="0.05 0 0.06" rpy="0 0 0" rgba="0.26 0.28 0.32 1"/>
+  </link>
+
+  <joint name="arm_mount_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="arm_mount_link"/>
+    <origin xyz="0 0 0.18" rpy="0 0 0"/>
+  </joint>
+
+  <xacro:franka_arm arm_id="fer" connected_to=""
+                   joint_limits="${xacro.load_yaml(fer_config + '/joint_limits.yaml')}"
+                   inertials="${fer_sim_inertials}"
+                   kinematics="${xacro.load_yaml(fer_config + '/kinematics.yaml')}"
+                   dynamics="${xacro.load_yaml(fer_config + '/dynamics.yaml')}"/>
+  <joint name="panda_mount_joint" type="fixed">
+    <parent link="arm_mount_link"/>
+    <child link="fer_link0"/>
+    <origin xyz="0.09 0 0.12" rpy="0 0 0"/>
+  </joint>
+  <xacro:franka_hand arm_id="fer" connected_to="fer_link8" ee_id="franka_hand_white"
+                    ee_inertials="${xacro.load_yaml('$(find franka_description)/end_effectors/franka_hand/inertials.yaml')}"
+                    rpy_ee="0 0 ${-pi/4}"/>
+
+  <!-- 6. Gazebo 接触参数、传感器和运动插件。 -->
+  <gazebo reference="front_caster_link">
+    <mu1>0.05</mu1>
+    <mu2>0.05</mu2>
+  </gazebo>
+  <gazebo reference="rear_caster_link">
+    <mu1>0.05</mu1>
+    <mu2>0.05</mu2>
+  </gazebo>
+  <gazebo reference="fer_leftfinger">
+    <mu1>2.0</mu1>
+    <mu2>2.0</mu2>
+  </gazebo>
+  <gazebo reference="fer_rightfinger">
+    <mu1>2.0</mu1>
+    <mu2>2.0</mu2>
+  </gazebo>
+
+  <gazebo reference="laser_link">
+    <sensor name="front_gpu_lidar" type="gpu_lidar">
+      <always_on>true</always_on>
+      <update_rate>15</update_rate>
+      <visualize>false</visualize>
+      <topic>/scan</topic>
+      <ignition_frame_id>laser_link</ignition_frame_id>
+      <ray>
+        <scan>
+          <horizontal>
+            <samples>720</samples>
+            <resolution>1</resolution>
+            <min_angle>-1.5707963267948966</min_angle>
+            <max_angle>1.5707963267948966</max_angle>
+          </horizontal>
+          <vertical>
+            <samples>1</samples>
+            <resolution>1</resolution>
+            <min_angle>0</min_angle>
+            <max_angle>0</max_angle>
+          </vertical>
+        </scan>
+        <range>
+          <min>0.10</min>
+          <max>12.0</max>
+          <resolution>0.01</resolution>
+        </range>
+      </ray>
+    </sensor>
+  </gazebo>
+
+  <gazebo>
+    <self_collide>true</self_collide>
+    <plugin filename="ignition-gazebo-diff-drive-system" name="ignition::gazebo::systems::DiffDrive">
+      <left_joint>left_wheel_joint</left_joint>
+      <right_joint>right_wheel_joint</right_joint>
+      <wheel_separation>0.46</wheel_separation>
+      <wheel_radius>0.10</wheel_radius>
+      <topic>/cmd_vel</topic>
+      <odom_topic>/odom</odom_topic>
+      <tf_topic>/tf</tf_topic>
+      <frame_id>odom</frame_id>
+      <child_frame_id>base_link</child_frame_id>
+    </plugin>
+    <plugin filename="ignition-gazebo-odometry-publisher-system"
+            name="ignition::gazebo::systems::OdometryPublisher">
+      <odom_topic>/ground_truth/odom</odom_topic>
+      <odom_frame>world</odom_frame>
+      <robot_base_frame>base_link</robot_base_frame>
+      <dimensions>3</dimensions>
+    </plugin>
+    <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+      <robot_param>robot_description</robot_param>
+      <robot_param_node>robot_state_publisher</robot_param_node>
+      <parameters>$(arg controllers_file)</parameters>
+    </plugin>
+  </gazebo>
+
+  <!-- 7. ros2_control：机械臂位置、夹爪力控和底盘只读状态。 -->
+  <ros2_control name="GazeboSimSystem" type="system">
+    <hardware>
+      <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+    </hardware>
+    <!-- Panda starts folded; revolute initial values are radians, prismatic values are metres. -->
+    <xacro:controlled_joint name="fer_joint1" interface="position" initial="0.0"/>
+    <xacro:controlled_joint name="fer_joint2" interface="position" initial="${-pi/4}"/>
+    <xacro:controlled_joint name="fer_joint3" interface="position" initial="0.0"/>
+    <xacro:controlled_joint name="fer_joint4" interface="position" initial="${-3*pi/4}"/>
+    <xacro:controlled_joint name="fer_joint5" interface="position" initial="0.0"/>
+    <xacro:controlled_joint name="fer_joint6" interface="position" initial="${pi/2}"/>
+    <xacro:controlled_joint name="fer_joint7" interface="position" initial="${pi/4}"/>
+    <!-- Fortress does not physically implement URDF mimic; send equal effort to both fingers. -->
+    <xacro:controlled_joint name="fer_finger_joint1" interface="effort" initial="0.04"/>
+    <xacro:controlled_joint name="fer_finger_joint2" interface="effort" initial="0.04"/>
+    <!-- Native DiffDrive owns wheel actuation; ros2_control publishes their read-only states. -->
+    <joint name="left_wheel_joint">
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="right_wheel_joint">
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="front_caster_joint">
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+    <joint name="rear_caster_joint">
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+    </joint>
+  </ros2_control>
+</robot>
