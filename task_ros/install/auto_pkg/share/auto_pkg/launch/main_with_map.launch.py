@@ -55,7 +55,7 @@ def generate_launch_description():
         PythonLaunchDescriptionSource(str(auto_share / "launch" / "world.launch.py")),
         launch_arguments={
             "gui": LaunchConfiguration("gui"),
-            "moving_obstacle": "false",
+            "moving_obstacle": LaunchConfiguration("moving_obstacle"),
         }.items(),
     )
     navigation_after_controllers = RegisterEventHandler(
@@ -72,6 +72,12 @@ def generate_launch_description():
         [
             DeclareLaunchArgument(
                 "gui", default_value="true", choices=["true", "false"]
+            ),
+            DeclareLaunchArgument(
+                "moving_obstacle",
+                default_value="false",
+                choices=["true", "false"],
+                description="同时启用移动障碍模型、桥接和驱动",
             ),
             DeclareLaunchArgument(
                 "map", default_value=str(navigation_share / "maps" / "map.yaml")

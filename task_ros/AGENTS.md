@@ -44,9 +44,10 @@ source install/setup.bash
 
 - 同一时间只运行一套定位/导航入口；完整主入口不要与单独的 `world.launch.py` 同时运行。建图也不要与定位、规划或导航同时运行。
 - 仿真入口支持 `gui:=false`；建图与导航入口支持 `rviz:=false`。
-- `world.launch.py moving_obstacle:=true` 同时生成模型、开启可选桥接并启动 `moving_obstacle_node`。完整主入口保持移动障碍关闭，导航期间机械臂收拢，停靠完成后再执行操作。
+- `world.launch.py` 和 `main_with_map.launch.py` 都支持 `moving_obstacle:=true`，默认关闭；开启时同时生成模型、配置桥接并启动 `moving_obstacle_node`。导航期间机械臂收拢，停靠完成后再执行操作。本开关不改变现有一次性规划策略，也不代表动态障碍场景的完整导航抓放已经验收。
 - 仿真启动动作直接在 `auto_pkg/launch/world.launch.py`，不再保留 `simulation.py` 或 `bringup.py` 启动辅助模块。先生成机器人，再加载关节控制器；`main_with_map.launch.py` 用 Include 组合入口，监听根命名空间下的 `/robot_controller_spawner` 成功退出后才启动导航，不用固定延时。
 - 完整主入口用独立作用域包含操作 launch，分别用 `params_file` 和 `manipulation_params_file` 指定导航与操作参数，避免同名 launch 参数把 Nav2 文件误传给操作节点。
+- 普通拷贝安装下，修改 launch/config 源码后需重新构建对应包再启动；不能只重启旧的 `install` 文件。本次统一入口开关已重新构建 `auto_pkg`，并实测障碍物实际运动。
 - 启动文件只做编排，ROS 节点实现在各包的 `*_node.py` 中，通过 `console_scripts` 和 `launch_ros.actions.Node` 启动。
 
 ## 建图

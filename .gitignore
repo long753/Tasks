@@ -19,6 +19,8 @@ dist/
 .coverage
 .coverage.*
 htmlcov/
+log/
+install/
 
 # 本地凭据；允许提交不含真实密钥的示例模板
 .env
